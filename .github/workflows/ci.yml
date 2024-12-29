@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+      - working
+  pull_request:
+    branches:
+      - master
+      - working
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: [3.12]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          node-version: '20'
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install --upgrade python_dateutil
+          pip install --upgrade pytz
+          pip install --upgrade tinydb
+          pip install --upgrade tinydb_serialization
+          pip install --upgrade tinydb_smartcache
+          pip install --upgrade prompt_toolkit
+          pip install --upgrade typing
+          pip install --upgrade logging
+          pip install --upgrade jinja2
+          pip install --upgrade pygments
+          pip install --upgrade ruamel.yaml
+          pip install --upgrade six
+          pip install --upgrade style
+          pip install --upgrade wcwidth
+          pip install --upgrade packaging
+          pip install --upgrade icalendar
+          pip install --upgrade lorem
+
+
+          pip install pytest
+
+      - name: Run tests
+        run: |
+          pytest

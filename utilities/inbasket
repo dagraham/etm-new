@@ -1,0 +1,132 @@
+#!/usr/bin/env python3
+# To invoke this script in neomutt with a message selected
+# 1) add the following macro to neomuttrc:
+#
+#   macro index,pager Ce ";<pipe-message>inbasket<enter>" "pipe to inbasket"
+#
+# 2) install this script somewhere in your path as "inbasket"
+# and make it executable (chmod +x inbasket).
+
+import sys, os, re
+import email
+from email.parser import BytesParser
+import subprocess
+import urllib.parse
+
+
+etmhome = os.environ.get("ETMHOME")
+if not etmhome:
+    print("The environmental variable 'ETMHOME' is missing but required.")
+    sys.exit()
+elif not os.path.isdir(etmhome):
+    print(f"The environmental variable 'ETMHOME={etmhome}' is not a valid directory.")
+    sys.exit()
+
+inbasket = os.path.join(etmhome, 'inbasket.text')
+
+help = f"""\
+usage: inbasket 'text'      use text
+   or: inbasket             get text from stdin
+   or: inbasket [?|help]    print this usage information
+
+With the environmental variable ETMHOME set to your etm
+root directory, text either piped to this script or
+provided as arguments will be appended to 'inbasket.text'
+in the ETMHOME directory. When this file exists, etm will
+display an ⓘ character at the right end of status bar
+alerting you that this file is available for import by
+pressing F5.
+
+If stdin is used and can be interpreted as an email message,
+this script will create a reminder of type inbox using
+'subject' as the summary, 'date' as @s, 'from' as @n, any
+'text/plain' content as @d and with an @g entry containing
+'message_id'.
+
+Otherwise, the input to this script will be interpreted as
+a reminder provided in etm format. If this text does not
+begin with an etm typechar in  -, *, % or !, then '!' will
+will be used.
+
+If the inbox typechar '!' is used then after importing,
+the reminder will appear as an 'inbox' item requiring your
+attention in the list for the current day in agenda view.
+This may be especially useful in composing quick notes with
+the assurance that you will be reminded to sort them out
+later. """
+
+# Parse the email from standard input
+if not sys.stdin.isatty():
+    std_in = sys.stdin.buffer.read()
+    # # std_in = sys.stdin.read()
+    # if std_in:
+    if isinstance(std_in, bytes):
+        # presumably an email message
+        not_email = False
+        try:
+            message = email.message_from_bytes(std_in)
+            message_id = message['message-id'][1:-1].strip()
+            if message_id.startswith('<'):
+                # outlook prepends a '<' to the actual message_id
+                message_id = message_id[1:]
+            # This will open the relevant email/thread in your gmail.
+            # {message_id} will # be replaced by the actual message_id.
+            # Edit this if you don't use gmail.
+            email_link = f" @g https://mail.google.com/mail/u/0/#search/rfc822msgid:<{message_id}>" if message_id else ""
+        except Exception as e:
+            not_email = True
+
+        if not_email:
+            reminder = std_in.decode('utf-8').strip()
+            reminder = reminder if str(reminder[0]) in "!*-%" else f"! {reminder}"
+        else:
+            # Grab the relevant message headers
+            subject = message['subject']
+            sender = message['from']
+            date = message['date']
+            date = f" @s {date} " if date else ""
+            date = re.sub('\+0000', '@z UTC', date)
+            date = re.sub(' [+-]\d{4}', '', date)
+            print(f"date: {date};  {type(date)}")
+            email_message = {
+                part.get_content_type(): part.get_payload(decode=True)
+                for part in message.walk()
+            }
+            # use just the text/plain parts
+            content = email_message["text/plain"]
+            content = content.decode("utf-8") if content else ""
+
+            # try to omit the parts south of the signature
+            nosig = re.split(r'\r?\s*\n\r?\s*\n(--.*)?\r?\s*\n', content)[0]
+
+            # try to omit the parts south of From: or wrote:
+            body = re.split(r'\nFrom: |\n.* wrote:\s*\n', nosig)[0]
+
+            description = f" @d {body.strip()}" if body else ""
+            reminder = f"! {subject}{date} @n {sender}{description}{email_link}"
+
+elif len(sys.argv) > 1:
+    if sys.argv[1].startswith('help') or sys.argv[1].startswith('?'):
+        print(help)
+        sys.exit()
+    if len(sys.argv) == 2:
+        reminder = " ".join(sys.argv[1:])
+        reminder = reminder if reminder[0] in "!*-%" else f"! {reminder}"
+    else:
+        print("The provided input should be wrapped in single quotes")
+        sys.exit()
+else:
+    print(help)
+    sys.exit()
+
+# if input in ["help", "?"]:
+#     print(help)
+#     sys.exit()
+
+with open(inbasket, 'a') as fo:
+    fo.write(f"{reminder}\n")
+print(f"appended:\n---\n{reminder}\n---\nto {inbasket}")
+
+# if input in ["help", "?"]:
+#     print(help)
+#     sys.exit()
