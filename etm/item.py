@@ -16,7 +16,7 @@ from common import wrap
 
 type_keys = {
     '*': 'event',
-    '-': 'task',
+    '-': 'task', 
     '%': 'journal',
     '!': 'inbox',
     '~': 'goal',
