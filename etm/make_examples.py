@@ -1,4 +1,5 @@
 #! /usr/bin/env python3
+import sqlite3
 import random
 import lorem
 from dateutil import rrule as dr
@@ -60,9 +61,15 @@ freq = [
     '@r d &i 2',
     '@r d &i 3',
 ]
-stop = [f'&c {n}' for n in range(2, 5)] + [
-    f'&u +{n}{days_or_weeks()}' for n in range(2, 5)
-]
+
+# DTSTART:20240807T160000
+# RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=WE
+# DTSTART:20240807T160000
+# RRULE:FREQ=WEEKLY;BYDAY=MO
+# RDATE:20240809T143000,20240816T134500
+# EXDATE:20240821T160000
+
+stop = [f'COUNT={n}' for n in range(2, 5)]
 
 
 def cnt():

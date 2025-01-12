@@ -505,7 +505,7 @@ def setup_logging(level, etmdir, file=None):
                 'encoding': 'utf8',
                 'filename': logfile,
                 'formatter': 'simple',
-                'level': loglevel,
+                'level': loglevel ,
                 'when': 'midnight',
                 'interval': 1,
             }
