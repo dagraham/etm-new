@@ -8,10 +8,11 @@ from dateutil.rrule import rrulestr
 from typing import List, Tuple
 from prompt_toolkit.styles.named_colors import NAMED_COLORS
 
+
 # Constants for busy bar rendering
-DAY_COLOR = NAMED_COLORS["LightSkyBlue"]
-BUSY_COLOR = NAMED_COLORS["LightSlateGray"]
-CONF_COLOR = NAMED_COLORS["DarkOrange"]
+BUSY_COLOR = NAMED_COLORS["YellowGreen"]
+CONF_COLOR = NAMED_COLORS["Tomato"]
+FRAME_COLOR = NAMED_COLORS["DimGrey"]
 SLOT_HOURS = [0, 4, 8, 12, 16, 20, 24]
 SLOT_MINUTES = [x * 60 for x in SLOT_HOURS]
 BUSY = "■"  # U+25A0 this will be busy_bar busy and conflict character
@@ -371,13 +372,15 @@ class DatabaseManager:
                 busy_bar.append(f"[dim]{FREE}[/dim]")
             elif busy_conf[SLOT_MINUTES[i]] == 1:
                 have_busy = True
-                busy_bar.append(f"[{DAY_COLOR}]{BUSY}[/{DAY_COLOR}]")
+                busy_bar.append(f"[{BUSY_COLOR}]{BUSY}[/{BUSY_COLOR}]")
             else:
                 have_busy = True
                 busy_bar.append(f"[{CONF_COLOR}]{BUSY}[/{CONF_COLOR}]")
 
         busy_str = (
-            f"\n[{BUSY_COLOR}]{''.join(busy_bar)}[/{BUSY_COLOR}]" if have_busy else "\n"
+            f"\n[{FRAME_COLOR}]{''.join(busy_bar)}[/{FRAME_COLOR}]"
+            if have_busy
+            else "\n"
         )
         aday_str = f"{ADAY}" if allday > 0 else ""
 

@@ -3,6 +3,7 @@ from sre_compile import dis
 from prompt_toolkit.styles.named_colors import NAMED_COLORS
 from rich.console import Console
 from rich.table import Table
+from rich import style
 from rich.columns import Columns
 from rich.console import Group, group
 from rich.panel import Panel
@@ -19,9 +20,8 @@ import string
 import shutil
 
 
-DAY_COLOR = NAMED_COLORS["LightSkyBlue"]
-BUSY_COLOR = NAMED_COLORS["LightSlateGray"]
-CONF_COLOR = NAMED_COLORS["DarkOrange"]
+DAY_COLOR = NAMED_COLORS["LemonChiffon"]
+FRAME_COLOR = NAMED_COLORS["Khaki"]
 DIM_COLOR = NAMED_COLORS["LightSlateGray"]
 EVENT_COLOR = NAMED_COLORS["LimeGreen"]
 AVAILABLE_COLOR = NAMED_COLORS["LightSkyBlue"]
@@ -32,7 +32,13 @@ CHORE_COLOR = NAMED_COLORS["Khaki"]
 PASTDUE_COLOR = NAMED_COLORS["DarkOrange"]
 BEGIN_COLOR = NAMED_COLORS["Gold"]
 INBOX_COLOR = NAMED_COLORS["OrangeRed"]
+TODAY_COLOR = NAMED_COLORS["Tomato"]
 
+
+# SELECTED_COLOR = NAMED_COLORS["Yellow"]
+SELECTED_COLOR = "bold yellow"
+
+HEADER_COLOR = NAMED_COLORS["LemonChiffon"]
 
 ONEDAY = timedelta(days=1)
 ONEWK = 7 * ONEDAY
@@ -49,9 +55,6 @@ TYPE_TO_COLOR = {
     ">": BEGIN_COLOR,  # begin
     "!": INBOX_COLOR,  # inbox
 }
-
-# TODO: Add a setting to show unscheduled events
-show_unscheduled = False
 
 messages = []
 
@@ -221,7 +224,9 @@ class FourWeekView:
 
         # Navigation
         self.key_bindings.add("right")(lambda _: self.move_next_period())
+        self.key_bindings.add("down")(lambda _: self.move_next_week())
         self.key_bindings.add("left")(lambda _: self.move_previous_period())
+        self.key_bindings.add("up")(lambda _: self.move_previous_week())
         self.key_bindings.add("space")(lambda _: self.reset_to_today())
         self.key_bindings.add("Q")(lambda _: self.quit())
 
@@ -230,9 +235,9 @@ class FourWeekView:
 
             @self.key_bindings.add(digit)
             def _(_, digit=digit):
-                log_msg(f"Processing digit: {digit}, {type(digit) = }")
+                # log_msg(f"Processing digit: {digit}, {type(digit) = }")
                 yr_wk = self.rownum_to_yrwk[int(digit)]
-                log_msg(f"Selected week: {yr_wk}")
+                # log_msg(f"Selected week: {yr_wk}")
                 self.selected_week = yr_wk
                 self.refresh_display()
 
@@ -278,26 +283,27 @@ class FourWeekView:
         )  # End on a Sunday
         start_date = self.current_start_date
         now_year, now_week, now_day = datetime.now().isocalendar()
-        title = (
-            # f"{start_date.strftime('%B %-d')} – {end_date.strftime('%B %-d, %Y')}"
-            f"{format_date_range(start_date, end_date)}"
-            if start_date.year == end_date.year
-            else f"{start_date.strftime('%B %-d, %Y')} – {end_date.strftime('%B %-d, %Y')}"
-        )
+        title = format_date_range(start_date, end_date)
+        # title = (
+        #     # f"{start_date.strftime('%B %-d')} – {end_date.strftime('%B %-d, %Y')}"
+        #     f"[{HEADER_COLOR}]{format_date_range(start_date, end_date)}[/{HEADER_COLOR}]"
+        #     if start_date.year == end_date.year
+        #     else f"[{HEADER_COLOR}]{start_date.strftime('%B %-d, %Y')} – {end_date.strftime('%B %-d, %Y')}[/{HEADER_COLOR}]"
+        # )
 
         table = Table(
             show_header=True,
             header_style="bold blue",
             show_lines=True,
+            style=FRAME_COLOR,
             expand=True,
             box=box.SQUARE,
-            title=title,
         )
 
         weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
         table.add_column(f"[{DIM_COLOR}]Wk[/{DIM_COLOR}]", justify="center", width=6)
         for day in weekdays:
-            table.add_column(day, justify="center", style=DAY_COLOR, width=10)
+            table.add_column(day, justify="center", style=DAY_COLOR, width=10, ratio=1)
 
         # self.monthday_to_details = {}  # Reset for this period
         self.rownum_to_details = {}  # Reset for this period
@@ -311,10 +317,13 @@ class FourWeekView:
                 weeks.append(yr_wk)
             row_num += 1
             self.rownum_to_yrwk[row_num] = yr_wk
-            if yr_wk == self.selected_week:
-                row = [f"[reverse][bold][yellow]{row_num}[yellow][/bold][/reverse]\n"]
-            else:
-                row = [f"[{DIM_COLOR}]{row_num}[{DIM_COLOR}]\n"]
+            row = [f"[{DIM_COLOR}]{row_num}[{DIM_COLOR}]\n"]
+            SELECTED = yr_wk == self.selected_week
+            row = (
+                [f"[{SELECTED_COLOR}]{row_num}[/{SELECTED_COLOR}]\n"]
+                if SELECTED
+                else [f"[{DIM_COLOR}]{row_num}[{DIM_COLOR}]\n"]
+            )
             for weekday in range(1, 8):  # ISO weekdays: 1 = Monday, 7 = Sunday
                 date = datetime.strptime(f"{iso_year} {iso_week} {weekday}", "%G %V %u")
                 monthday_str = date.strftime(
@@ -329,7 +338,7 @@ class FourWeekView:
 
                 mday = monthday_str
                 if today:
-                    mday = f"[bold][yellow]{monthday_str}[/yellow][/bold]"
+                    mday = f"[bold][{TODAY_COLOR}]{monthday_str}[/{TODAY_COLOR}][/bold]"
                 # if self.selected_day and monthday_str == self.selected_day:
                 #     mday = f"[reverse][bold][yellow]{mday}[/yellow][/bold][/reverse]"
 
@@ -350,12 +359,16 @@ class FourWeekView:
                 # self.monthday_to_details[monthday_str], tag_to_id = (
                 #     self.get_day_details(date)
                 # )
+                if SELECTED:
+                    row = [
+                        f"[{SELECTED_COLOR}]{cell}[/{SELECTED_COLOR}]" for cell in row
+                    ]
 
             table.add_row(*row)
             self.yrwk_to_details[yr_wk] = self.get_week_details((iso_year, iso_week))
             current_date += timedelta(weeks=1)
 
-        return table
+        return title, table
 
     def refresh_display(self, details=None):
         """
@@ -375,8 +388,12 @@ class FourWeekView:
             self.current_start_date, self.current_start_date + timedelta(weeks=4)
         )
 
+        terminal_width = shutil.get_terminal_size().columns
         # Generate the table
-        table = self.generate_table(grouped_events)
+        title, table = self.generate_table(grouped_events)
+        title = (
+            f"[bold][{HEADER_COLOR}]{title:^{terminal_width}}[/{HEADER_COLOR}][/bold]"
+        )
 
         # Auto-select today's date if within the displayed period
         today = datetime.now()
@@ -395,6 +412,7 @@ class FourWeekView:
 
         # Create a panel group for the table and details
         panel_group = Group(
+            title,
             table,
             # Panel(details, title="Details", border_style="blue"),
             details,
@@ -417,12 +435,16 @@ class FourWeekView:
         this_week = format_date_range(start_datetime, end_datetime - ONEDAY)
         terminal_width = shutil.get_terminal_size().columns
 
-        header = f"Items for {this_week} ({len(events)})"
-        details = [f"[not bold][yellow]{header:^{terminal_width}}[/yellow][/not bold]"]
+        header = f"Items for {this_week} #{yr_wk[1]} ({len(events)})"
+        details = [
+            f"[not bold][{HEADER_COLOR}]{header:^{terminal_width}}[/{HEADER_COLOR}][/not bold]"
+        ]
 
         if not events:
-            details.append("Nothing scheduled for this week")
-            return "\n".join(details), {}
+            details.append(
+                f" [{HEADER_COLOR}]Nothing scheduled for this week[/{HEADER_COLOR}]"
+            )
+            return "\n".join(details)
 
         # use a, ..., z if len(events) <= 26 else use aa, ..., zz
         self.afill = 1 if len(events) <= 26 else 2
@@ -465,21 +487,17 @@ class FourWeekView:
             if events:
                 details.append(
                     # f" [bold][yellow]{day.strftime('%A, %B %-d')}[/yellow][/bold]"
-                    f" [not bold][yellow]{day.strftime('%A, %B %-d')}[/yellow][/not bold]"
+                    f" [{HEADER_COLOR}]{day.strftime('%a, %b %-d')}[/{HEADER_COLOR}]"
                 )
-            elif show_unscheduled:
-                details.append(
-                    f" [not bold][{DIM_COLOR}]{day.strftime('%A, %B %-d')}[/{DIM_COLOR}][/not bold]"
-                )
-            for event in events:
-                event_id, event_str = event
-                tag = indx_to_tag(indx, self.afill)
-                self.tag_to_id[yr_wk][tag] = event_id
-                details.append(f"  [dim]{tag}[/dim]  {event_str} {event_id}")
-                indx += 1
+                for event in events:
+                    event_id, event_str = event
+                    tag = indx_to_tag(indx, self.afill)
+                    self.tag_to_id[yr_wk][tag] = event_id
+                    details.append(f"  [dim]{tag}[/dim]  {event_str} {event_id}")
+                    indx += 1
         details_str = "\n".join(details)
         self.yrwk_to_details[yr_wk] = details_str
-        log_msg(f"tags for {yr_wk}: {self.tag_to_id = }")
+        # log_msg(f"tags for {yr_wk}: {self.tag_to_id = }")
         return details_str
 
     # def process_rownum(self, digit):
@@ -508,11 +526,29 @@ class FourWeekView:
         self.selected_week = tuple(self.current_start_date.isocalendar()[:2])
         self.refresh_display()
 
+    def move_next_week(self):
+        """
+        Move to the next week in the current 4-week period.
+        """
+        self.current_start_date += timedelta(weeks=1)
+        self.selected_day = None
+        self.selected_week = tuple(self.current_start_date.isocalendar()[:2])
+        self.refresh_display()
+
     def move_previous_period(self):
         """
         Move to the previous 4-week period.
         """
         self.current_start_date -= timedelta(weeks=4)
+        self.selected_day = None
+        self.selected_week = tuple(self.current_start_date.isocalendar()[:2])
+        self.refresh_display()
+
+    def move_previous_week(self):
+        """
+        Move to the previous week in the current 4-week period.
+        """
+        self.current_start_date -= timedelta(weeks=1)
         self.selected_day = None
         self.selected_week = tuple(self.current_start_date.isocalendar()[:2])
         self.refresh_display()

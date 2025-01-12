@@ -119,17 +119,6 @@ def main():
     # Create an instance of FourWeekView with the database manager and bindings
     view = FourWeekView(db_manager, bindings)
     view.run()
-    # Set the initial display with afill = 1
-    view.prepare_display(afill_value=1)
-
-    # Populate tags for testing
-    view.tag_to_id = {"a": 1, "b": 2, "aa": 3, "ab": 4}
-
-    print("FourWeekView initialized and running.")
-    print("Press keys to test the functionality or quit the app.")
-
-    # Run your app's event loop or key listener here
-    # (Replace with your actual event loop implementation)
 
 
 if __name__ == "__main__":
