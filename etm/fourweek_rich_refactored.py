@@ -60,17 +60,55 @@ TYPE_TO_COLOR = {
 
 messages = []
 
+import inspect
+from rich import print as rprint
 
-def log_msg(msg: str):
-    global messages
+DEFAULT_LOG_FILE = "log_msg.txt"
+
+
+def log_msg(msg: str, file_path: str = DEFAULT_LOG_FILE):
+    """
+    Log a message and save it directly to a specified file.
+
+    Args:
+        msg (str): The message to log.
+        file_path (str, optional): Path to the log file. Defaults to "log_msg.txt".
+    """
     caller_name = inspect.stack()[1].function
-    messages.append(f"[yellow]{caller_name}[/yellow]:\n  {msg}")
+    formatted_msg = f"[yellow]{caller_name}[/yellow]:\n  {msg}"
+
+    # Save the message to the file
+    with open(file_path, "a") as f:
+        f.write(f"{formatted_msg}\n")
 
 
-def display_messages():
-    global messages
-    for msg in messages:
-        rprint(msg)
+def display_messages(file_path: str = DEFAULT_LOG_FILE):
+    """
+    Display all logged messages from the specified file.
+
+    Args:
+        file_path (str, optional): Path to the log file. Defaults to "log_msg.txt".
+    """
+    try:
+        # Read messages from the file
+        with open(file_path, "r") as f:
+            for msg in f:
+                rprint(msg.strip())
+    except FileNotFoundError:
+        rprint(f"[red]Error:[/red] Log file '{file_path}' not found.")
+
+
+# def log_msg(msg: str):
+#     global messages
+#     caller_name = inspect.stack()[1].function
+#     messages.append(f"[yellow]{caller_name}[/yellow]:\n  {msg}")
+#
+#
+# def display_messages():
+#     global messages
+#     for msg in messages:
+#         rprint(msg)
+#
 
 
 def format_date_range(start_dt: datetime, end_dt: datetime):
@@ -577,7 +615,7 @@ class FourWeekView:
                 id,
                 f"[{type_color}]{type} {escaped_start_end:<12}  {name}[/{type_color}]",
             ]
-            weekday_to_events[start_dt.date()].append(row)
+            weekday_to_events.setdefault(start_dt.date(), []).append(row)
 
         indx = 0
 

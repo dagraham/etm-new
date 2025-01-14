@@ -1,5 +1,6 @@
 import os
 import sqlite3
+import inspect
 from typing import Optional
 from bisect import bisect_left, bisect_right
 from collections import defaultdict
@@ -18,6 +19,40 @@ SLOT_MINUTES = [x * 60 for x in SLOT_HOURS]
 BUSY = "■"  # U+25A0 this will be busy_bar busy and conflict character
 FREE = "□"  # U+25A1 this will be busy_bar free character
 ADAY = "━"  # U+2501 for all day events ━
+
+DEFAULT_LOG_FILE = "log_msg.txt"
+
+
+def log_msg(msg: str, file_path: str = DEFAULT_LOG_FILE):
+    """
+    Log a message and save it directly to a specified file.
+
+    Args:
+        msg (str): The message to log.
+        file_path (str, optional): Path to the log file. Defaults to "log_msg.txt".
+    """
+    caller_name = inspect.stack()[1].function
+    formatted_msg = f"[yellow]{caller_name}[/yellow]:\n  {msg}"
+
+    # Save the message to the file
+    with open(file_path, "a") as f:
+        f.write(f"{formatted_msg}\n")
+
+
+def display_messages(file_path: str = DEFAULT_LOG_FILE):
+    """
+    Display all logged messages from the specified file.
+
+    Args:
+        file_path (str, optional): Path to the log file. Defaults to "log_msg.txt".
+    """
+    try:
+        # Read messages from the file
+        with open(file_path, "r") as f:
+            for msg in f:
+                rprint(msg.strip())
+    except FileNotFoundError:
+        rprint(f"[red]Error:[/red] Log file '{file_path}' not found.")
 
 
 class DatabaseManager:
@@ -92,6 +127,7 @@ class DatabaseManager:
 
         start_year, start_week = start.isocalendar()[:2]
         end_year, end_week = end.isocalendar()[:2]
+        log_msg(f"Generating weeks {start_year}-{start_week} to {end_year}-{end_week}")
 
         self.cursor.execute(
             "SELECT start_year, start_week, end_year, end_week FROM GeneratedWeeks"
@@ -138,9 +174,62 @@ class DatabaseManager:
 
         self.conn.commit()
 
+    # def generate_datetimes_for_period(self, start_date, end_date):
+    #     """
+    #     Populate the DateTimes table with datetimes for all records within the specified range.
+    #
+    #     Args:
+    #         start_date (datetime): The start of the period.
+    #         end_date (datetime): The end of the period.
+    #     """
+    #     # Fetch all records with their rrule strings, extents, and processed state
+    #     self.cursor.execute("SELECT id, rrulestr, extent, processed FROM Records")
+    #     records = self.cursor.fetchall()
+    #
+    #     for record_id, rule_str, extent, processed in records:
+    #         # Skip finite recurrences that have already been processed
+    #         if processed == 1:
+    #             if (
+    #                 "RRULE" not in rule_str
+    #                 or "COUNT=" in rule_str
+    #                 or "UNTIL=" in rule_str
+    #             ):
+    #                 continue
+    #
+    #         # Replace any escaped newline characters in rrulestr
+    #         rule_str = rule_str.replace("\\N", "\n").replace("\\n", "\n")
+    #
+    #         # Generate occurrences for the given range
+    #         try:
+    #             occurrences = self.generate_datetimes(
+    #                 rule_str, extent, start_date, end_date
+    #             )
+    #
+    #             for start_dt, end_dt in occurrences:
+    #                 self.cursor.execute(
+    #                     """
+    #                 INSERT INTO DateTimes (record_id, start_datetime, end_datetime)
+    #                 VALUES (?, ?, ?)
+    #                 """,
+    #                     (record_id, int(start_dt.timestamp()), int(end_dt.timestamp())),
+    #                 )
+    #         except Exception as e:
+    #             log_msg(
+    #                 f"Error processing rrulestr for record_id {record_id}: {rule_str}\n{e}"
+    #             )
+    #
+    #         # Mark finite recurrences as processed
+    #         if "RRULE" not in rule_str or "COUNT=" in rule_str or "UNTIL=" in rule_str:
+    #             self.cursor.execute(
+    #                 "UPDATE Records SET processed = 1 WHERE id = ?", (record_id,)
+    #             )
+    #
+    #     self.conn.commit()
+
     def generate_datetimes_for_period(self, start_date, end_date):
         """
         Populate the DateTimes table with datetimes for all records within the specified range.
+        For finite recurrences (e.g., COUNT, UNTIL, or RDATE), generate all datetimes and mark as processed.
 
         Args:
             start_date (datetime): The start of the period.
@@ -151,42 +240,61 @@ class DatabaseManager:
         records = self.cursor.fetchall()
 
         for record_id, rule_str, extent, processed in records:
-            # Skip finite recurrences that have already been processed
-            if processed == 1:
-                if (
-                    "RRULE" not in rule_str
-                    or "COUNT=" in rule_str
-                    or "UNTIL=" in rule_str
-                ):
-                    continue
-
             # Replace any escaped newline characters in rrulestr
             rule_str = rule_str.replace("\\N", "\n").replace("\\n", "\n")
 
-            # Generate occurrences for the given range
+            # Determine if the recurrence is finite
+            is_finite = (
+                "RRULE" not in rule_str or "COUNT=" in rule_str or "UNTIL=" in rule_str
+            )
+
+            # Skip already-processed finite recurrences
+            if processed == 1 and is_finite:
+                continue
+
             try:
-                occurrences = self.generate_datetimes(
-                    rule_str, extent, start_date, end_date
-                )
-
-                for start_dt, end_dt in occurrences:
-                    self.cursor.execute(
-                        """
-                    INSERT INTO DateTimes (record_id, start_datetime, end_datetime)
-                    VALUES (?, ?, ?)
-                    """,
-                        (record_id, int(start_dt.timestamp()), int(end_dt.timestamp())),
+                if is_finite:
+                    # Generate all occurrences for the entire recurrence period
+                    full_occurrences = self.generate_datetimes(
+                        rule_str, extent, datetime.min, datetime.max
                     )
-            except Exception as e:
-                print(
-                    f"Error processing rrulestr for record_id {record_id}: {rule_str}"
-                )
-                print(e)
+                    for start_dt, end_dt in full_occurrences:
+                        self.cursor.execute(
+                            """
+                            INSERT OR IGNORE INTO DateTimes (record_id, start_datetime, end_datetime)
+                            VALUES (?, ?, ?)
+                            """,
+                            (
+                                record_id,
+                                int(start_dt.timestamp()),
+                                int(end_dt.timestamp()),
+                            ),
+                        )
+                    # Mark finite rules (RRULE or RDATE) as processed after all occurrences are inserted
+                    self.cursor.execute(
+                        "UPDATE Records SET processed = 1 WHERE id = ?", (record_id,)
+                    )
+                else:
+                    # Generate occurrences for the specified range for infinite rules
+                    occurrences = self.generate_datetimes(
+                        rule_str, extent, start_date, end_date
+                    )
+                    for start_dt, end_dt in occurrences:
+                        self.cursor.execute(
+                            """
+                            INSERT OR IGNORE INTO DateTimes (record_id, start_datetime, end_datetime)
+                            VALUES (?, ?, ?)
+                            """,
+                            (
+                                record_id,
+                                int(start_dt.timestamp()),
+                                int(end_dt.timestamp()),
+                            ),
+                        )
 
-            # Mark finite recurrences as processed
-            if "RRULE" not in rule_str or "COUNT=" in rule_str or "UNTIL=" in rule_str:
-                self.cursor.execute(
-                    "UPDATE Records SET processed = 1 WHERE id = ?", (record_id,)
+            except Exception as e:
+                log_msg(
+                    f"Error processing rrulestr for record_id {record_id}: {rule_str}\n{e}"
                 )
 
         self.conn.commit()
@@ -428,7 +536,7 @@ class DatabaseManager:
 
             if b == 0 and e == 0:
                 allday += 1
-            if e == b and not all_day:
+            if e == b and not allday:
                 continue
 
             start_slot = bisect_left(L, b) - 1
