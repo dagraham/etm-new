@@ -105,7 +105,7 @@ def use_examples():
     conn = sqlite3.connect(db_path)
     c = conn.cursor()
 
-    num_items = 300
+    num_items = 400
     types = ["-", "*"]
 
     locations = ["errands", "home", "office", "shop"]
