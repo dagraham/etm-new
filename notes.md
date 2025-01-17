@@ -1,5 +1,11 @@
 # Notes
 
+## Refactor model and view
+
+refresh_display
+
+
+
 ## Scratch Pad
 
 Suppose I have 6 "slots" corresponding to the intervals between integers in L = [0, 240, 480, 720, 960, 1300, 1440] and events that correspond tuples(b, e) of two integers each of which >=0 and <= 1440.
@@ -9,7 +15,7 @@ Think of the slot 1 as the tuple (0, 240), slot 2 as (240, 480), etc.
 Now suppose I have an event (b, e) = (100, 200). Slot 1 should be busy for this event and all the other slots should be free. With (b, e) = (100, 240) this should still be true. But with (b, e) = (100, 241) slot 2 should be busy as well. With (b, e) = (240, 720), slots 2 and 3 should be busy.
 
 How can I do this?
-
+ 
 ## Week-based views
 
 ### Why week based views

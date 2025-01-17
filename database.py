@@ -112,12 +112,11 @@ def use_examples():
     tags = ["red", "green", "blue"]
     dates = [0, 0, 0, 1, 0, 0, 0]  # dates 1/7 of the time
     repeat = [0, 0, 0, 0, 1, 0, 0, 0, 0, 0]  # repeat 1/10 of the time
-    duration = [x for x in range(30, 210, 15)]
+    duration = [x for x in range(0, 210, 15)]
 
     now = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     num_konnections = 0
     num_items = int(num_items)
-    # include 12 weeks: 6 previous, the current and the following 5
     wkbeg, wkend = week(now)
     months = num_items // 200
     start = wkbeg - 12 * 7 * ONEDAY
@@ -183,6 +182,9 @@ def use_examples():
         else:
             rrulestr = f"RDATE:{dtstart}"
         extent = random.choice(duration)
+        # if date:
+        #     name = f"{name} {start.strftime('%Y-%m-%d')}"
+        #     # extent = 0
         records.append((t, name, details, rrulestr, extent))
 
     id = 0
@@ -611,7 +613,7 @@ c = None
 
 def main():
     global conn, c
-    if sys.argv[1:] and sys.argv[1] == "use_examples":
+    if sys.argv[1:] and sys.argv[1] == "xxx":
         use_examples()
         return
     conn, c = setup_database()

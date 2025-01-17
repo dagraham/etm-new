@@ -1,3 +1,4 @@
+# TODO: Keep the display part - the model part will be in model.py
 from datetime import datetime, timedelta
 from logging import log
 from sre_compile import dis
@@ -35,6 +36,8 @@ PASTDUE_COLOR = NAMED_COLORS["DarkOrange"]
 BEGIN_COLOR = NAMED_COLORS["Gold"]
 INBOX_COLOR = NAMED_COLORS["OrangeRed"]
 TODAY_COLOR = NAMED_COLORS["Tomato"]
+# SELECTED_BACKGROUND = "#4d4d4d"
+SELECTED_BACKGROUND = "#5d5d5d"
 
 
 # SELECTED_COLOR = NAMED_COLORS["Yellow"]
@@ -178,20 +181,6 @@ def indx_to_tag(indx: int, fill: int = 1):
     Convert an index to a base-26 tag.
     """
     return decimal_to_base26(indx).ljust(fill, "a")
-
-
-# log_msg(f"""
-#     {decimal_to_base26(0) = }
-#     {decimal_to_base26(1) = }
-#     {decimal_to_base26(25) = }
-#     {decimal_to_base26(26) = }
-#     {decimal_to_base26(675) = }
-#     {base26_to_decimal("a") = }
-#     {base26_to_decimal("b") = }
-#     {base26_to_decimal("z") = }
-#     {base26_to_decimal("ba") = }
-#     {base26_to_decimal("gz") = }
-# """)
 
 
 def base26_to_decimal(base26_num):
@@ -459,8 +448,10 @@ class FourWeekView:
                     row = [
                         f"[{SELECTED_COLOR}]{cell}[/{SELECTED_COLOR}]" for cell in row
                     ]
-
-            table.add_row(*row)
+            if SELECTED:
+                table.add_row(*row, style=f"on {SELECTED_BACKGROUND}")
+            else:
+                table.add_row(*row)
             self.yrwk_to_details[yr_wk] = self.get_week_details((iso_year, iso_week))
             current_date += timedelta(weeks=1)
 
