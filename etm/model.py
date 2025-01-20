@@ -24,45 +24,6 @@ ADAY = "━"  # U+2501 for all day events ━
 DEFAULT_LOG_FILE = "log_msg.md"
 
 
-# start_yr, start_wk = datetime.now().isocalendar()[:2]
-# start = datetime.strptime(f"{yr} {wk} 1", "%G %V %u")
-# end = start + timedelta(weeks=12)
-
-
-# def log_msg(msg: str, file_path: str = "log_msg.md"):
-#     """
-#     Log a message and save it directly to a specified file.
-#
-#     Args:
-#         msg (str): The message to log.
-#         file_path (str, optional): Path to the log file. Defaults to "log_msg.txt".
-#     """
-#     caller_name = inspect.stack()[1].function
-#     formatted_msg = (
-#         f"- {datetime.now().strftime('%y-%m-%d %H:%M')} ({caller_name}):\n  {msg}"
-#     )
-#
-#     # Save the message to the file
-#     with open(file_path, "a") as f:
-#         f.write(f"{formatted_msg}\n")
-#
-#
-# def display_messages(file_path: str = "log_msg.md"):
-#     """
-#     Display all logged messages from the specified file.
-#
-#     Args:
-#         file_path (str, optional): Path to the log file. Defaults to "log_msg.txt".
-#     """
-#     try:
-#         # Read messages from the file
-#         with open(file_path, "r") as f:
-#             for msg in f:
-#                 print(msg.strip())
-#     except FileNotFoundError:
-#         rprint(f"Error: Log file '{file_path}' not found.")
-
-
 class DatabaseManager:
     def __init__(self, db_path, replace=False):
         """
@@ -185,58 +146,6 @@ class DatabaseManager:
         )
 
         self.conn.commit()
-
-    # def generate_datetimes_for_period(self, start_date, end_date):
-    #     """
-    #     Populate the DateTimes table with datetimes for all records within the specified range.
-    #
-    #     Args:
-    #         start_date (datetime): The start of the period.
-    #         end_date (datetime): The end of the period.
-    #     """
-    #     # Fetch all records with their rrule strings, extents, and processed state
-    #     self.cursor.execute("SELECT id, rrulestr, extent, processed FROM Records")
-    #     records = self.cursor.fetchall()
-    #
-    #     for record_id, rule_str, extent, processed in records:
-    #         # Skip finite recurrences that have already been processed
-    #         if processed == 1:
-    #             if (
-    #                 "RRULE" not in rule_str
-    #                 or "COUNT=" in rule_str
-    #                 or "UNTIL=" in rule_str
-    #             ):
-    #                 continue
-    #
-    #         # Replace any escaped newline characters in rrulestr
-    #         rule_str = rule_str.replace("\\N", "\n").replace("\\n", "\n")
-    #
-    #         # Generate occurrences for the given range
-    #         try:
-    #             occurrences = self.generate_datetimes(
-    #                 rule_str, extent, start_date, end_date
-    #             )
-    #
-    #             for start_dt, end_dt in occurrences:
-    #                 self.cursor.execute(
-    #                     """
-    #                 INSERT INTO DateTimes (record_id, start_datetime, end_datetime)
-    #                 VALUES (?, ?, ?)
-    #                 """,
-    #                     (record_id, int(start_dt.timestamp()), int(end_dt.timestamp())),
-    #                 )
-    #         except Exception as e:
-    #             log_msg(
-    #                 f"Error processing rrulestr for record_id {record_id}: {rule_str}\n{e}"
-    #             )
-    #
-    #         # Mark finite recurrences as processed
-    #         if "RRULE" not in rule_str or "COUNT=" in rule_str or "UNTIL=" in rule_str:
-    #             self.cursor.execute(
-    #                 "UPDATE Records SET processed = 1 WHERE id = ?", (record_id,)
-    #             )
-    #
-    #     self.conn.commit()
 
     def generate_datetimes_for_period(self, start_date, end_date):
         """

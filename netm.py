@@ -1,4 +1,4 @@
-from etm.data import DatabaseManager
+from etm.model import DatabaseManager
 from etm.view_rich import FourWeekView
 from prompt_toolkit.key_binding import KeyBindings
 
