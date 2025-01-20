@@ -103,11 +103,8 @@ class WeeksTable:
 class WeeksViewApp(App):
     """An app to display the table and scrollable list."""
 
-    CSS = """
-    Screen {
-        background: #2e2e2e; /* Dark grey  near perfect */
-    }
-    """
+    CSS_PATH = "view_textual.css"
+
     BINDINGS = [
         ("?", "help", "Help"),
         ("q", "quit", ""),  # binds without displaying in footer
@@ -115,10 +112,11 @@ class WeeksViewApp(App):
         # ("]", "scroll_right", "→ 4wks"),
         # ("{", "scroll_up", "↑ 1wk"),
         # ("}", "scroll_down", "↓ 1wk"),
-        ("left", "scroll_left", "← 4wks"),
-        ("right", "scroll_right", "→ 4wks"),
-        ("up", "scroll_up", "↑ 1wk"),
-        ("down", "scroll_down", "↓ 1wk"),
+        ("space", "current_period", "current period"),
+        ("left", "previous_period", "previous period"),
+        ("right", "next_period", "next period"),
+        ("up", "previous_week", "previous_week"),
+        ("down", "next_week", "next_week"),
     ]
 
     def __init__(self) -> None:
@@ -137,17 +135,20 @@ class WeeksViewApp(App):
     def action_help(self):
         self.exit()
 
-    def action_scroll_right(self):
+    def action_next_period(self):
         # self.exit()
         pass
 
-    def action_scroll_left(self):
+    def action_previous_period(self):
         pass
 
-    def action_scroll_up(self):
+    def action_previous_week(self):
         pass
 
-    def action_scroll_down(self):
+    def action_next_week(self):
+        pass
+
+    def action_current_period(self):
         pass
 
     def compose(self) -> ComposeResult:

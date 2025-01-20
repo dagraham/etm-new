@@ -166,16 +166,33 @@ def use_examples():
 
     count = [f"COUNT={n}" for n in range(2, 5)]
 
-    records = []
+    yesterday_date = (now - ONEDAY).strftime("%Y%m%d")
+    today_date = now.strftime("%Y%m%d")
+    tomorrow_date = (now + ONEDAY).strftime("%Y%m%d")
+    records = [
+        ("*", "all day yesterday", "all day event", f"RDATE:{yesterday_date}", 0),
+        ("*", "all day today", "all day event", f"RDATE:{today_date}", 0),
+        ("*", "all day tomorrow", "all day event", f"RDATE:{tomorrow_date}", 0),
+        ("-", "day end yesterday", "all day task", f"RDATE:{yesterday_date}T235959", 0),
+        ("-", "day end today", "all day task", f"RDATE:{today_date}T235959", 0),
+        ("-", "day end tomorrow", "all day task", f"RDATE:{tomorrow_date}T235959", 0),
+        ("*", "zero extent", "zero extent event", f"RDATE:{tomorrow_date}T100000", 0),
+    ]
     while len(records) < num_items:
         t = random.choice(types)
         name = phrase()
         details = lorem.paragraph() + " #lorem"
         start = random.choice(datetimes)
         date = random.choice(dates)
-        dts = (
-            start.strftime("%Y%m%dT000000") if date else start.strftime("%Y%m%dT%H%M00")
-        )
+        if date:
+            # all day if event else end of day
+            dts = (
+                start.strftime("%Y%m%dT000000")
+                if t == "*"
+                else start.strftime("%Y%m%dT235959")
+            )
+        else:
+            dts = start.strftime("%Y%m%dT%H%M00")
         dtstart = local_dtstr_to_utc_str(dts)
         if random.choice(repeat):
             rrulestr = f"DTSTART:{dtstart}\\nRRULE:{random.choice(freq)};{random.choice(count)}"

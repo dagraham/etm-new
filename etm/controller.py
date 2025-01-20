@@ -63,30 +63,6 @@ TYPE_TO_COLOR = {
 }
 
 
-# import inspect
-# from rich import print as rprint
-#
-# DEFAULT_LOG_FILE = "log_msg.txt"
-#
-#
-# def log_msg(msg: str, file_path: str = DEFAULT_LOG_FILE):
-#     """
-#     Log a message and save it directly to a specified file.
-#
-#     Args:
-#         msg (str): The message to log.
-#         file_path (str, optional): Path to the log file. Defaults to "log_msg.txt".
-#     """
-#     caller_name = inspect.stack()[1].function
-#     formatted_msg = f"[yellow]{caller_name}[/yellow]:\n  {msg}"
-#
-#     # Save the message to the file
-#     with open(file_path, "a") as f:
-#         f.write(f"{formatted_msg}\n")
-#
-#
-
-
 def format_date_range(start_dt: datetime, end_dt: datetime):
     """
     Format a datetime object as a week string, taking not to repeat the month name unless the week spans two months.

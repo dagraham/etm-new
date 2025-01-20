@@ -1,669 +1,614 @@
-# TODO: keep the model part here and remove the rich display part - that will be in view_rich.
+import os
+import sqlite3
+import inspect
+from typing import Optional
+from bisect import bisect_left, bisect_right
+from collections import defaultdict
 from datetime import datetime, timedelta
-from logging import log
+from dateutil.rrule import rrulestr
+from typing import List, Tuple
 from prompt_toolkit.styles.named_colors import NAMED_COLORS
-from rich.console import Console
-from rich.table import Table
-from rich import style
-from rich.columns import Columns
-from rich.console import Group, group
-from rich.panel import Panel
-from rich.layout import Layout
-from rich import print as rprint
-import re
-import inspect
-from rich.theme import Theme
-from rich import box
 
-from prompt_toolkit.key_binding import KeyBindings
-from prompt_toolkit.keys import Keys
-from prompt_toolkit.shortcuts import PromptSession
-import string
-import shutil
+from .common import log_msg, display_messages
+
+# Constants for busy bar rendering
+BUSY_COLOR = NAMED_COLORS["YellowGreen"]
+CONF_COLOR = NAMED_COLORS["Tomato"]
+FRAME_COLOR = NAMED_COLORS["DimGrey"]
+SLOT_HOURS = [0, 4, 8, 12, 16, 20, 24]
+SLOT_MINUTES = [x * 60 for x in SLOT_HOURS]
+BUSY = "■"  # U+25A0 this will be busy_bar busy and conflict character
+FREE = "□"  # U+25A1 this will be busy_bar free character
+ADAY = "━"  # U+2501 for all day events ━
+
+DEFAULT_LOG_FILE = "log_msg.md"
 
 
-DAY_COLOR = NAMED_COLORS["LemonChiffon"]
-FRAME_COLOR = NAMED_COLORS["Khaki"]
-DIM_COLOR = NAMED_COLORS["DarkGray"]
-EVENT_COLOR = NAMED_COLORS["LimeGreen"]
-AVAILABLE_COLOR = NAMED_COLORS["LightSkyBlue"]
-WAITING_COLOR = NAMED_COLORS["SlateGrey"]
-FINISHED_COLOR = NAMED_COLORS["DarkGrey"]
-GOAL_COLOR = NAMED_COLORS["GoldenRod"]
-CHORE_COLOR = NAMED_COLORS["Khaki"]
-PASTDUE_COLOR = NAMED_COLORS["DarkOrange"]
-BEGIN_COLOR = NAMED_COLORS["Gold"]
-INBOX_COLOR = NAMED_COLORS["OrangeRed"]
-TODAY_COLOR = NAMED_COLORS["Tomato"]
+# start_yr, start_wk = datetime.now().isocalendar()[:2]
+# start = datetime.strptime(f"{yr} {wk} 1", "%G %V %u")
+# end = start + timedelta(weeks=12)
 
 
-# SELECTED_COLOR = NAMED_COLORS["Yellow"]
-SELECTED_COLOR = "bold yellow"
-
-HEADER_COLOR = NAMED_COLORS["LemonChiffon"]
-
-ONEDAY = timedelta(days=1)
-ONEWK = 7 * ONEDAY
-alpha = [x for x in string.ascii_lowercase]
-
-TYPE_TO_COLOR = {
-    "*": EVENT_COLOR,  # event
-    "-": AVAILABLE_COLOR,  # available task
-    "+": WAITING_COLOR,  # waiting task
-    "%": FINISHED_COLOR,  # finished task
-    "~": GOAL_COLOR,  # goal
-    "^": CHORE_COLOR,  # chore
-    "<": PASTDUE_COLOR,  # past due task
-    ">": BEGIN_COLOR,  # begin
-    "!": INBOX_COLOR,  # inbox
-}
-
-messages = []
-
-import inspect
-from rich import print as rprint
-
-DEFAULT_LOG_FILE = "log_msg.txt"
-
-
-def log_msg(msg: str, file_path: str = DEFAULT_LOG_FILE):
-    """
-    Log a message and save it directly to a specified file.
-
-    Args:
-        msg (str): The message to log.
-        file_path (str, optional): Path to the log file. Defaults to "log_msg.txt".
-    """
-    caller_name = inspect.stack()[1].function
-    formatted_msg = f"[yellow]{caller_name}[/yellow]:\n  {msg}"
-
-    # Save the message to the file
-    with open(file_path, "a") as f:
-        f.write(f"{formatted_msg}\n")
-
-
-def display_messages(file_path: str = DEFAULT_LOG_FILE):
-    """
-    Display all logged messages from the specified file.
-
-    Args:
-        file_path (str, optional): Path to the log file. Defaults to "log_msg.txt".
-    """
-    try:
-        # Read messages from the file
-        with open(file_path, "r") as f:
-            for msg in f:
-                rprint(msg.strip())
-    except FileNotFoundError:
-        rprint(f"[red]Error:[/red] Log file '{file_path}' not found.")
-
-
-# def log_msg(msg: str):
-#     global messages
+# def log_msg(msg: str, file_path: str = "log_msg.md"):
+#     """
+#     Log a message and save it directly to a specified file.
+#
+#     Args:
+#         msg (str): The message to log.
+#         file_path (str, optional): Path to the log file. Defaults to "log_msg.txt".
+#     """
 #     caller_name = inspect.stack()[1].function
-#     messages.append(f"[yellow]{caller_name}[/yellow]:\n  {msg}")
+#     formatted_msg = (
+#         f"- {datetime.now().strftime('%y-%m-%d %H:%M')} ({caller_name}):\n  {msg}"
+#     )
+#
+#     # Save the message to the file
+#     with open(file_path, "a") as f:
+#         f.write(f"{formatted_msg}\n")
 #
 #
-# def display_messages():
-#     global messages
-#     for msg in messages:
-#         rprint(msg)
+# def display_messages(file_path: str = "log_msg.md"):
+#     """
+#     Display all logged messages from the specified file.
 #
+#     Args:
+#         file_path (str, optional): Path to the log file. Defaults to "log_msg.txt".
+#     """
+#     try:
+#         # Read messages from the file
+#         with open(file_path, "r") as f:
+#             for msg in f:
+#                 print(msg.strip())
+#     except FileNotFoundError:
+#         rprint(f"Error: Log file '{file_path}' not found.")
 
 
-def format_date_range(start_dt: datetime, end_dt: datetime):
-    """
-    Format a datetime object as a week string, taking not to repeat the month name unless the week spans two months.
-    """
-    same_year = start_dt.year == end_dt.year
-    same_month = start_dt.month == end_dt.month
-    # same_day = start_dt.day == end_dt.day
-    if same_year and same_month:
-        return f"{start_dt.strftime('%B %-d')} - {end_dt.strftime('%-d, %Y')}"
-    elif same_year and not same_month:
-        return f"{start_dt.strftime('%B %-d')} - {end_dt.strftime('%B %-d, %Y')}"
-    else:
-        return f"{start_dt.strftime('%B %-d, %Y')} - {end_dt.strftime('%B %-d, %Y')}"
-
-
-def decimal_to_base26(decimal_num):
-    """
-    Convert a decimal number to its equivalent base-26 string.
-
-    Args:
-        decimal_num (int): The decimal number to convert.
-
-    Returns:
-        str: The base-26 representation where 'a' = 0, 'b' = 1, ..., 'z' = 25.
-    """
-    if decimal_num < 0:
-        raise ValueError("Decimal number must be non-negative.")
-
-    if decimal_num == 0:
-        return "a"  # Special case for zero
-
-    base26 = ""
-    while decimal_num > 0:
-        digit = decimal_num % 26
-        base26 = chr(digit + ord("a")) + base26  # Map digit to 'a'-'z'
-        decimal_num //= 26
-
-    return base26
-
-
-def base26_to_decimal(base26_num):
-    """
-    Convert an arbitrary-length base-26 number to its decimal equivalent.
-
-    Args:
-        base26_num (str): A base-26 string using 'a' as 0 and 'z' as 25.
-
-    Returns:
-        int: The decimal equivalent of the base-26 number.
-    """
-    decimal_value = 0
-    length = len(base26_num)
-
-    # Process each character in the base-26 string
-    for i, char in enumerate(base26_num):
-        digit = ord(char) - ord("a")  # Map 'a' to 0, ..., 'z' to 25
-        power = length - i - 1  # Compute the power of 26
-        decimal_value += digit * (26**power)
-
-    return decimal_value
-
-
-def indx_to_tag(indx: int, fill: int = 1):
-    """
-    Convert an index to a base-26 tag.
-    """
-    return decimal_to_base26(indx).ljust(fill, "a")
-
-
-# log_msg(f"""
-#     {decimal_to_base26(0) = }
-#     {decimal_to_base26(1) = }
-#     {decimal_to_base26(25) = }
-#     {decimal_to_base26(26) = }
-#     {decimal_to_base26(675) = }
-#     {base26_to_decimal("a") = }
-#     {base26_to_decimal("b") = }
-#     {base26_to_decimal("z") = }
-#     {base26_to_decimal("ba") = }
-#     {base26_to_decimal("gz") = }
-# """)
-
-
-def base26_to_decimal(base26_num):
-    """
-    Convert a 2-digit base-26 number to its decimal equivalent.
-
-    Args:
-        base26_num (str): A 2-character string in base-26 using 'a' as 0 and 'z' as 25.
-
-    Returns:
-        int: The decimal equivalent of the base-26 number.
-    """
-    # Ensure the input is exactly 2 characters
-    if len(base26_num) != 2:
-        raise ValueError("Input must be a 2-character base-26 number.")
-
-    # Map each character to its base-26 value
-    digit1 = ord(base26_num[0]) - ord("a")  # First character
-    digit2 = ord(base26_num[1]) - ord("a")  # Second character
-
-    # Compute the decimal value
-    decimal_value = digit1 * 26**1 + digit2 * 26**0
-
-    return decimal_value
-
-
-def get_previous_yrwk(year, week):
-    """
-    Get the previous (year, week) from an ISO calendar (year, week).
-    """
-    # Convert the ISO year and week to a Monday date
-    monday_date = datetime.strptime(f"{year} {week} 1", "%G %V %u")
-    # Subtract 1 week
-    previous_monday = monday_date - timedelta(weeks=1)
-    # Get the ISO year and week of the new date
-    return previous_monday.isocalendar()[:2]
-
-
-def get_next_yrwk(year, week):
-    """
-    Get the next (year, week) from an ISO calendar (year, week).
-    """
-    # Convert the ISO year and week to a Monday date
-    monday_date = datetime.strptime(f"{year} {week} 1", "%G %V %u")
-    # Add 1 week
-    next_monday = monday_date + timedelta(weeks=1)
-    # Get the ISO year and week of the new date
-    return next_monday.isocalendar()[:2]
-
-
-class FourWeekView:
-    def __init__(self, db_manager, bindings):
+class DatabaseManager:
+    def __init__(self, db_path, replace=False):
         """
-        Initialize the FourWeekView with a database manager.
-        """
-        self.db_manager = db_manager
-        self.console = Console(theme=Theme({}))
-        self.current_start_date = self.calculate_4_week_start()
-        self.key_bindings = bindings
-        self.digit_buffer = []  # Buffer for storing two-digit input
-        self.showing_item = False
-        self.selected_week = tuple(
-            datetime.now().isocalendar()[:2]
-        )  # Currently selected week
-        self.yrwk_to_details = {}  # Maps (iso_year, iso_week), to the details for that week
-        self.rownum_to_yrwk = {}  # Maps row numbers to (iso_year, iso_week) for the current period
-        self.afill = 1
-        self.tag_to_id = {}  # Maps tag numbers to event IDs
-        self.setup_key_bindings()
-
-    def get_record_details_as_string(self, record_id):
-        """
-        Retrieve and format the details of a record as a string.
+        Initialize the database manager and optionally replace the database.
 
         Args:
-            record_id (int): The ID of the record to retrieve.
+            db_path (str): Path to the SQLite database file.
+            replace (bool): Whether to replace the existing database.
+        """
+        self.db_path = db_path
+        if replace and os.path.exists(db_path):
+            os.remove(db_path)
+        self.conn = sqlite3.connect(self.db_path)
+        self.cursor = self.conn.cursor()
+        # self.conn: Optional[sqlite3.Connection] = None
+        # self.cursor: Optional[sqlite3.Cursor] = None
+        self.setup_database()
+        yr, wk = datetime.now().isocalendar()[:2]
+        log_msg(f"Generating weeks for 12 weeks starting from {yr} week number {wk}")
+        self.extend_datetimes_for_weeks(yr, wk, 12)
+
+    def setup_database(self):
+        """
+        Set up the SQLite database schema.
+        """
+        # self.conn = sqlite3.connect(self.db_path)
+        # self.cursor = self.conn.cursor()
+
+        self.cursor.execute("""
+        CREATE TABLE IF NOT EXISTS Records (
+            id INTEGER PRIMARY KEY,
+            type TEXT CHECK(type IN ('*', '-', '~', '^')) NOT NULL,
+            name TEXT NOT NULL,
+            details TEXT,
+            rrulestr TEXT,
+            extent INTEGER,
+            processed INTEGER DEFAULT 0
+        )
+        """)
+
+        self.cursor.execute("""
+        CREATE TABLE IF NOT EXISTS DateTimes (
+            record_id INTEGER,
+            start_datetime INTEGER,
+            end_datetime INTEGER,
+            FOREIGN KEY (record_id) REFERENCES Records (id)
+        )
+        """)
+
+        self.cursor.execute("""
+        CREATE TABLE IF NOT EXISTS GeneratedWeeks (
+            start_year INTEGER,
+            start_week INTEGER, 
+            end_year INTEGER, 
+            end_week INTEGER
+        )
+        """)
+
+        self.conn.commit()
+
+    def extend_datetimes_for_weeks(self, start_year, start_week, weeks):
+        """
+        Extend the DateTimes table by generating data for the specified number of weeks
+        starting from a given year and week.
+
+        Args:
+            start_year (int): The starting year.
+            start_week (int): The starting ISO week.
+            weeks (int): Number of weeks to generate.
+        """
+        start = datetime.strptime(f"{start_year} {start_week} 1", "%G %V %u")
+        end = start + timedelta(weeks=weeks)
+
+        start_year, start_week = start.isocalendar()[:2]
+        end_year, end_week = end.isocalendar()[:2]
+        beg_year, beg_week = datetime.min.isocalendar()[:2]
+        # log_msg(f"Generating weeks {beg_year}-{beg_week} to {end_year}-{end_week}")
+
+        self.cursor.execute(
+            "SELECT start_year, start_week, end_year, end_week FROM GeneratedWeeks"
+        )
+        cached_ranges = self.cursor.fetchall()
+
+        # Determine the full range that needs to be generated
+        min_year = (
+            min(cached_ranges, key=lambda x: x[0])[0] if cached_ranges else start_year
+        )
+        min_week = (
+            min(cached_ranges, key=lambda x: x[1])[1] if cached_ranges else start_week
+        )
+        max_year = (
+            max(cached_ranges, key=lambda x: x[2])[2] if cached_ranges else end_year
+        )
+        max_week = (
+            max(cached_ranges, key=lambda x: x[3])[3] if cached_ranges else end_week
+        )
+
+        # Expand the range to include gaps and requested period
+        if start_year < min_year or (start_year == min_year and start_week < min_week):
+            min_year, min_week = start_year, start_week
+        if end_year > max_year or (end_year == max_year and end_week > max_week):
+            max_year, max_week = end_year, end_week
+
+        first_day = datetime.strptime(f"{min_year} {min_week} 1", "%G %V %u")
+        last_day = datetime.strptime(
+            f"{max_year} {max_week} 1", "%G %V %u"
+        ) + timedelta(days=6)
+
+        # Generate new datetimes for the extended range
+        self.generate_datetimes_for_period(first_day, last_day)
+
+        # Update the GeneratedWeeks table
+        self.cursor.execute("DELETE FROM GeneratedWeeks")  # Clear old entries
+        self.cursor.execute(
+            """
+        INSERT INTO GeneratedWeeks (start_year, start_week, end_year, end_week)
+        VALUES (?, ?, ?, ?)
+        """,
+            (min_year, min_week, max_year, max_week),
+        )
+
+        self.conn.commit()
+
+    # def generate_datetimes_for_period(self, start_date, end_date):
+    #     """
+    #     Populate the DateTimes table with datetimes for all records within the specified range.
+    #
+    #     Args:
+    #         start_date (datetime): The start of the period.
+    #         end_date (datetime): The end of the period.
+    #     """
+    #     # Fetch all records with their rrule strings, extents, and processed state
+    #     self.cursor.execute("SELECT id, rrulestr, extent, processed FROM Records")
+    #     records = self.cursor.fetchall()
+    #
+    #     for record_id, rule_str, extent, processed in records:
+    #         # Skip finite recurrences that have already been processed
+    #         if processed == 1:
+    #             if (
+    #                 "RRULE" not in rule_str
+    #                 or "COUNT=" in rule_str
+    #                 or "UNTIL=" in rule_str
+    #             ):
+    #                 continue
+    #
+    #         # Replace any escaped newline characters in rrulestr
+    #         rule_str = rule_str.replace("\\N", "\n").replace("\\n", "\n")
+    #
+    #         # Generate occurrences for the given range
+    #         try:
+    #             occurrences = self.generate_datetimes(
+    #                 rule_str, extent, start_date, end_date
+    #             )
+    #
+    #             for start_dt, end_dt in occurrences:
+    #                 self.cursor.execute(
+    #                     """
+    #                 INSERT INTO DateTimes (record_id, start_datetime, end_datetime)
+    #                 VALUES (?, ?, ?)
+    #                 """,
+    #                     (record_id, int(start_dt.timestamp()), int(end_dt.timestamp())),
+    #                 )
+    #         except Exception as e:
+    #             log_msg(
+    #                 f"Error processing rrulestr for record_id {record_id}: {rule_str}\n{e}"
+    #             )
+    #
+    #         # Mark finite recurrences as processed
+    #         if "RRULE" not in rule_str or "COUNT=" in rule_str or "UNTIL=" in rule_str:
+    #             self.cursor.execute(
+    #                 "UPDATE Records SET processed = 1 WHERE id = ?", (record_id,)
+    #             )
+    #
+    #     self.conn.commit()
+
+    def generate_datetimes_for_period(self, start_date, end_date):
+        """
+        Populate the DateTimes table with datetimes for all records within the specified range.
+        For finite recurrences (e.g., COUNT, UNTIL, or RDATE), generate all datetimes and mark as processed.
+
+        Args:
+            start_date (datetime): The start of the period.
+            end_date (datetime): The end of the period.
+        """
+        # Fetch all records with their rrule strings, extents, and processed state
+        self.cursor.execute("SELECT id, rrulestr, extent, processed FROM Records")
+        records = self.cursor.fetchall()
+
+        for record_id, rule_str, extent, processed in records:
+            # Replace any escaped newline characters in rrulestr
+            rule_str = rule_str.replace("\\N", "\n").replace("\\n", "\n")
+
+            # Determine if the recurrence is finite
+            is_finite = (
+                "RRULE" not in rule_str or "COUNT=" in rule_str or "UNTIL=" in rule_str
+            )
+
+            # Skip already-processed finite recurrences
+            if processed == 1 and is_finite:
+                continue
+
+            try:
+                if is_finite:
+                    # Generate all occurrences for the entire recurrence period
+                    full_occurrences = self.generate_datetimes(
+                        rule_str, extent, datetime.min, datetime.max
+                    )
+                    for start_dt, end_dt in full_occurrences:
+                        self.cursor.execute(
+                            """
+                            INSERT OR IGNORE INTO DateTimes (record_id, start_datetime, end_datetime)
+                            VALUES (?, ?, ?)
+                            """,
+                            (
+                                record_id,
+                                int(start_dt.timestamp()),
+                                int(end_dt.timestamp()),
+                            ),
+                        )
+                    # Mark finite rules (RRULE or RDATE) as processed after all occurrences are inserted
+                    self.cursor.execute(
+                        "UPDATE Records SET processed = 1 WHERE id = ?", (record_id,)
+                    )
+                else:
+                    # Generate occurrences for the specified range for infinite rules
+                    occurrences = self.generate_datetimes(
+                        # rule_str, extent, start_date, end_date
+                        rule_str,
+                        extent,
+                        datetime.min,
+                        end_date,
+                    )
+                    for start_dt, end_dt in occurrences:
+                        self.cursor.execute(
+                            """
+                            INSERT OR IGNORE INTO DateTimes (record_id, start_datetime, end_datetime)
+                            VALUES (?, ?, ?)
+                            """,
+                            (
+                                record_id,
+                                int(start_dt.timestamp()),
+                                int(end_dt.timestamp()),
+                            ),
+                        )
+
+            except Exception as e:
+                log_msg(
+                    f"Error processing rrulestr for record_id {record_id}: {rule_str}\n{e}"
+                )
+
+        self.conn.commit()
+
+    def generate_datetimes(self, rule_str, extent, start_date, end_date):
+        """
+        Generate occurrences for a given rrulestr within the specified date range.
+
+        Args:
+            rule_str (str): The rrule string defining the recurrence rule.
+            extent (int): The duration of each occurrence in minutes.
+            start_date (datetime): The start of the range.
+            end_date (datetime): The end of the range.
 
         Returns:
-            str: A formatted string with the record's details.
+            List[Tuple[datetime, datetime]]: A list of (start_dt, end_dt) tuples.
         """
-        # log_msg(f"Fetching details for record ID {record_id}")
-        self.db_manager.cursor.execute(
-            """
-            SELECT id, type, name, details, rrulestr, extent
-            FROM Records
-            WHERE id = ?
-            """,
-            (record_id,),
-        )
-        record = self.db_manager.cursor.fetchone()
-        # log_msg(f"Record: {record = }")
+        from dateutil.rrule import rrulestr
 
-        if not record:
-            return f"[red]No record found for ID {record_id}[/red]"
+        rule = rrulestr(rule_str, dtstart=start_date)
+        occurrences = list(rule.between(start_date, end_date, inc=True))
 
-        fields = ["Id", "Type", "Name", "Details", "RRule", "Extent"]
-        content = "\n".join(
-            f" [cyan]{field}:[/cyan] [white]{value if value is not None else '[dim]NULL[/dim]'}[/white]"
-            for field, value in zip(fields, record)
-        )
-        # log_msg(f"Content: {content}")
-        return content
+        # Create (start, end) pairs
+        results = []
+        for start_dt in occurrences:
+            end_dt = start_dt + timedelta(minutes=extent) if extent else start_dt
+            results.append((start_dt, end_dt))
 
-    def bind_keys(self, bindings):
+        return results
+
+    def get_events_for_period(self, start_date, end_date):
         """
-        Bind keys dynamically based on the current `afill` value.
-        """
-        for char in "abcdefghijklmnopqrstuvwxyz":
-
-            @bindings.add(char)
-            def _(event, char=char):
-                self.digit_buffer.append(char)
-                if len(self.digit_buffer) == self.afill:
-                    base26_tag = "".join(self.digit_buffer)
-                    self.digit_buffer.clear()
-                    self.process_tag(base26_tag)
-
-    def setup_key_bindings(self):
-        """
-        Set up key bindings for navigation, actions, and date selection.
-        """
-        # bindings = KeyBindings()
-
-        # Navigation
-        self.key_bindings.add("right")(lambda _: self.move_next_period())
-        self.key_bindings.add("down")(lambda _: self.move_next_week())
-        self.key_bindings.add("left")(lambda _: self.move_previous_period())
-        self.key_bindings.add("up")(lambda _: self.move_previous_week())
-        self.key_bindings.add("space")(lambda _: self.reset_to_today())
-        self.key_bindings.add("0")(lambda _: self.restore_details())
-        self.key_bindings.add("Q")(lambda _: self.quit())
-
-        # Add key bindings for digits
-        for digit in [str(x) for x in range(1, 5)]:
-
-            @self.key_bindings.add(digit)
-            def _(_, digit=digit):
-                # log_msg(f"Processing digit: {digit}, {type(digit) = }")
-                yr_wk = self.rownum_to_yrwk[int(digit)]
-                # log_msg(f"Selected week: {yr_wk}")
-                self.selected_week = yr_wk
-                self.refresh_display()
-
-        for char in "abcdefghijklmnopqrstuvwxyz":
-
-            @self.key_bindings.add(char)
-            def _(event, char=char):
-                self.digit_buffer.append(char)
-                if len(self.digit_buffer) == self.afill:
-                    base26_tag = "".join(self.digit_buffer)
-                    self.digit_buffer.clear()
-                    self.process_tag(base26_tag)
-
-        @self.key_bindings.add("escape", eager=True)
-        def _(event):
-            """
-            Restore the display when Escape is pressed.
-            """
-            self.restore_details()
-
-    def process_tag(self, tag):
-        """
-        Process the base26 tag entered by the user.
+        Retrieve all events that occur or overlap within a specified period,
+        including the type, name, and ID of each event, ordered by start time.
 
         Args:
-            tag (str): The tag corresponding to a record.
-        """
-        if tag in self.tag_to_id[self.selected_week]:
-            record_id = self.tag_to_id[self.selected_week][tag]
-            # log_msg(f"Tag '{tag}' corresponds to record ID {record_id}")
-            details = self.get_record_details_as_string(record_id)
-            self.showing_item = True
-            # log_msg(f"got {details = }")
-            self.refresh_display(details=details)
-        else:
-            self.refresh_display(details=f"[red]Invalid tag: '{tag}'[/red]")
+            start_date (datetime): The start of the period.
+            end_date (datetime): The end of the period.
 
-    def calculate_4_week_start(self):
+        Returns:
+            List[Tuple[int, int, str, str, int]]: A list of tuples containing
+            start and end timestamps, event type, event name, and event ID.
         """
-        Calculate the starting date of the 4-week period, starting on a Monday.
-        """
-        today = datetime.now()
-        iso_year, iso_week, iso_weekday = today.isocalendar()
-        # start_of_week = datetime.strptime(
-        #     " ".join(map(str, [iso_year, iso_week, 1])), "%G %V %u"
-        # )
-        start_of_week = today - timedelta(days=iso_weekday - 1)
-        weeks_into_cycle = (iso_week - 1) % 4
-        return start_of_week - timedelta(weeks=weeks_into_cycle)
-
-    def generate_table(self, grouped_events):
-        """
-        Generate a Rich table displaying events for the specified 4-week period.
-        """
-        end_date = (
-            self.current_start_date + timedelta(weeks=4) - ONEDAY
-        )  # End on a Sunday
-        start_date = self.current_start_date
-        now_year, now_week, now_day = datetime.now().isocalendar()
-        title = format_date_range(start_date, end_date)
-
-        table = Table(
-            show_header=True,
-            header_style="bold blue",
-            show_lines=True,
-            style=FRAME_COLOR,
-            expand=True,
-            box=box.SQUARE,
+        self.cursor.execute(
+            """
+        SELECT dt.start_datetime, dt.end_datetime, r.type, r.name, r.id 
+        FROM DateTimes dt
+        JOIN Records r ON dt.record_id = r.id
+        WHERE dt.start_datetime < ? AND dt.end_datetime >= ?
+        ORDER BY dt.start_datetime
+        """,
+            (end_date.timestamp(), start_date.timestamp()),
         )
+        return self.cursor.fetchall()
 
-        weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-        table.add_column(f"[{DIM_COLOR}]Wk[/{DIM_COLOR}]", justify="center", width=6)
-        for day in weekdays:
-            table.add_column(day, justify="center", style=DAY_COLOR, width=10, ratio=1)
-
-        self.rownum_to_details = {}  # Reset for this period
-        current_date = self.current_start_date
-        weeks = []
-        row_num = 0
-        while current_date <= end_date:
-            yr_wk = current_date.isocalendar()[:2]
-            iso_year, iso_week = yr_wk
-            if yr_wk not in weeks:
-                weeks.append(yr_wk)
-            row_num += 1
-            self.rownum_to_yrwk[row_num] = yr_wk
-            row = [f"[{DIM_COLOR}]{row_num}[{DIM_COLOR}]\n"]
-            SELECTED = yr_wk == self.selected_week
-            row = (
-                [f"[{SELECTED_COLOR}]{row_num}[/{SELECTED_COLOR}]\n"]
-                if SELECTED
-                else [f"[{DIM_COLOR}]{row_num}[{DIM_COLOR}]\n"]
-            )
-            for weekday in range(1, 8):  # ISO weekdays: 1 = Monday, 7 = Sunday
-                date = datetime.strptime(f"{iso_year} {iso_week} {weekday}", "%G %V %u")
-                monthday_str = date.strftime(
-                    "%-d"
-                )  # Month day as string without leading zero
-                events = (
-                    grouped_events.get(iso_year, {}).get(iso_week, {}).get(weekday, [])
-                )
-                today = (
-                    iso_year == now_year and iso_week == now_week and weekday == now_day
-                )
-
-                mday = monthday_str
-                if today:
-                    mday = f"[bold][{TODAY_COLOR}]{monthday_str}[/{TODAY_COLOR}][/bold]"
-
-                if events:
-                    tups = [
-                        self.db_manager.event_tuple_to_minutes(ev[0], ev[1])
-                        for ev in events
-                    ]
-                    aday_str, busy_str = self.db_manager.get_busy_bar(tups)
-                    # log_msg(f"{date = }, {tups = }, {busy_str = }")
-                    if aday_str:
-                        row.append(f"{aday_str} {mday} {aday_str}{busy_str}")
-                    else:
-                        row.append(f"{mday}{busy_str}")
-                else:
-                    row.append(f"{mday}\n")
-
-                if SELECTED:
-                    row = [
-                        f"[{SELECTED_COLOR}]{cell}[/{SELECTED_COLOR}]" for cell in row
-                    ]
-
-            table.add_row(*row)
-            self.yrwk_to_details[yr_wk] = self.get_week_details((iso_year, iso_week))
-            current_date += timedelta(weeks=1)
-
-        return title, table
-
-    def refresh_display(self, details=None):
+    def process_events(self, start_date, end_date):
         """
-        Refresh the display by fetching and processing events, generating the table,
-        and rendering the details below the table in a panel group.
+        Process events and split across days for display.
 
         Args:
-            details (str, optional): The details to display below the table. Defaults to None.
+            start_date (datetime): The start of the period.
+            end_date (datetime): The end of the period.
+
+        Returns:
+            Dict[int, Dict[int, Dict[int, List[Tuple]]]]: Nested dictionary grouped by year, week, and weekday.
         """
-        current_start_year, current_start_week, _ = (
-            self.current_start_date.isocalendar()
-        )
-        self.db_manager.extend_datetimes_for_weeks(
-            current_start_year, current_start_week, 4
-        )
-        grouped_events = self.db_manager.process_events(
-            self.current_start_date, self.current_start_date + timedelta(weeks=4)
-        )
+        from collections import defaultdict
+        from datetime import datetime, timedelta
+        from dateutil.tz import gettz
 
-        terminal_width = shutil.get_terminal_size().columns
-        # Generate the table
-        title, table = self.generate_table(grouped_events)
-        title = (
-            f"[bold][{HEADER_COLOR}]{title:^{terminal_width}}[/{HEADER_COLOR}][/bold]"
-        )
+        # Retrieve all events for the specified period
+        events = self.get_events_for_period(start_date, end_date)
+        # Group events by ISO year, week, and weekday
+        grouped_events = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
 
-        instructions = f"""[{DIM_COLOR}]
- Cursor keys: left/right scroll 4 weeks, up/down scroll 1 week
- 1, 2, 3, 4: list items for week, Q: quit application
- a, b, ...: display details for item, 0: restore item list[/{DIM_COLOR}]"""
-
-        # Check if details were provided
-        if details is None:
-            # Auto-select today's date if within the displayed period
-            today = datetime.now()
-            today_str = today.strftime("%-d")  # Month day without leading zero
-
-            # Default to the details for the selected week
-            if self.selected_week in self.yrwk_to_details:
-                details = self.yrwk_to_details[self.selected_week]
-            else:
-                details = "No week selected."
-
-        # Create a panel group for the table and details
-        panel_group = Group(
-            title,
-            table,
-            # Panel(details, border_style=f"{FRAME_COLOR}", box=box.SQUARE, ),
-            details,
-            instructions,
-            # Panel(instructions, border_style=f"{DIM_COLOR}", box=box.SQUARE),
-        )
-
-        # Clear the console and render the panel group
-        self.console.clear()
-        self.console.print(panel_group)
-
-    def get_week_details(self, yr_wk):
-        """
-        Fetch and format details for a specific week.
-        """
-        start_datetime = datetime.strptime(f"{yr_wk[0]} {yr_wk[1]} 1", "%G %V %u")
-
-        end_datetime = start_datetime + timedelta(weeks=1)
-        events = self.db_manager.get_events_for_period(start_datetime, end_datetime)
-        this_week = format_date_range(start_datetime, end_datetime - ONEDAY)
-        terminal_width = shutil.get_terminal_size().columns
-
-        header = f"Items for {this_week} #{yr_wk[1]} ({len(events)})"
-        details = [
-            f"[not bold][{HEADER_COLOR}]{header:^{terminal_width}}[/{HEADER_COLOR}][/not bold]"
-        ]
-
-        if not events:
-            details.append(
-                f" [{HEADER_COLOR}]Nothing scheduled for this week[/{HEADER_COLOR}]"
+        for start_ts, end_ts, event_type, name, id in events:
+            # Convert timestamps to localized datetime objects
+            # if start_ts == end_ts:
+            #     log_msg(f"Event {name} has zero duration")
+            start_dt = (
+                datetime.utcfromtimestamp(start_ts)
+                .replace(tzinfo=gettz("UTC"))
+                .astimezone()
+                .replace(tzinfo=None)
             )
-            return "\n".join(details)
+            end_dt = (
+                datetime.utcfromtimestamp(end_ts)
+                .replace(tzinfo=gettz("UTC"))
+                .astimezone()
+                .replace(tzinfo=None)
+            )
 
-        # use a, ..., z if len(events) <= 26 else use aa, ..., zz
-        self.afill = 1 if len(events) <= 26 else 2
-
-        self.tag_to_id.setdefault(yr_wk, {})
-        weekday_to_events = {}
-        for i in range(7):
-            this_day = (start_datetime + timedelta(days=i)).date()
-            weekday_to_events[this_day] = []
-
-        for start_ts, end_ts, type, name, id in events:
-            start_dt = datetime.fromtimestamp(start_ts)
-            end_dt = datetime.fromtimestamp(end_ts)
-
-            if start_dt == end_dt:
-                if start_dt.hour == 0 and start_dt.minute == 0:
-                    start_end = ""
-                else:
-                    start_end = start_dt.strftime("%H:%M")
-            else:
-                start_end = f"{start_dt.strftime('%H:%M')}-{end_dt.strftime('%H:%M')}"
-
-            type_color = TYPE_TO_COLOR[type]
-            escaped_start_end = f"[not bold]{start_end}[/not bold]"
-            row = [
-                id,
-                f"[{type_color}]{type} {escaped_start_end:<12}  {name}[/{type_color}]",
-            ]
-            weekday_to_events.setdefault(start_dt.date(), []).append(row)
-
-        indx = 0
-
-        tag = indx_to_tag(indx, self.afill)
-
-        for day, events in weekday_to_events.items():
-            if events:
-                details.append(
-                    # f" [bold][yellow]{day.strftime('%A, %B %-d')}[/yellow][/bold]"
-                    f" [not bold][{HEADER_COLOR}]{day.strftime('%a, %b %-d')}[/{HEADER_COLOR}][/not bold]"
+            # Process and split events across day boundaries
+            while start_dt.date() <= end_dt.date():
+                # Compute the end time for the current day
+                zero_duration = start_dt == end_dt
+                # if zero_duration:
+                #     log_msg(f"zero_duration item: {name}")
+                day_end = min(
+                    end_dt,
+                    datetime.combine(
+                        start_dt.date(), datetime.max.time()
+                    ),  # End of the current day
                 )
-                for event in events:
-                    event_id, event_str = event
-                    tag = indx_to_tag(indx, self.afill)
-                    self.tag_to_id[yr_wk][tag] = event_id
-                    details.append(f"  [dim]{tag}[/dim]  {event_str} {event_id}")
-                    indx += 1
-        details_str = "\n".join(details)
-        self.yrwk_to_details[yr_wk] = details_str
-        return details_str
 
-    def move_next_period(self):
-        """
-        Move to the next 4-week period.
-        """
-        self.current_start_date += timedelta(weeks=4)
-        self.selected_week = tuple(self.current_start_date.isocalendar()[:2])
-        self.refresh_display()
+                # Group by ISO year, week, and weekday
+                iso_year, iso_week, iso_weekday = start_dt.isocalendar()
+                # grouped_events[iso_year][iso_week][iso_weekday].append((start_dt, day_end, event_type, name))
+                grouped_events[iso_year][iso_week][iso_weekday].append(
+                    (start_dt, day_end)
+                )
+                # if zero_duration:
+                #     log_msg(f"zero_duration appended: {name} {start_dt} {day_end}")
 
-    def move_next_week(self):
-        """
-        Move to the next week in the current 4-week period.
-        """
-        self.selected_week = get_next_yrwk(*self.selected_week)
-        if self.selected_week > tuple(
-            (self.current_start_date + timedelta(weeks=4) - ONEDAY).isocalendar()[:2]
-        ):
-            self.current_start_date += timedelta(weeks=1)
-        self.refresh_display()
+                # Move to the start of the next day
+                start_dt = datetime.combine(
+                    start_dt.date() + timedelta(days=1), datetime.min.time()
+                )
 
-    def move_previous_period(self):
-        """
-        Move to the previous 4-week period.
-        """
-        self.current_start_date -= timedelta(weeks=4)
-        self.selected_week = tuple(self.current_start_date.isocalendar()[:2])
-        self.refresh_display()
+        return grouped_events
 
-    def move_previous_week(self):
+    def event_tuple_to_minutes(
+        self, start_dt: datetime, end_dt: datetime
+    ) -> Tuple[int, int]:
         """
-        Move to the previous week in the current 4-week period.
-        """
-        self.selected_week = get_previous_yrwk(*self.selected_week)
-        if self.selected_week < tuple((self.current_start_date).isocalendar()[:2]):
-            self.current_start_date -= timedelta(weeks=1)
-        self.refresh_display()
+        Convert event start and end datetimes to minutes since midnight.
 
-    def reset_to_today(self):
-        """
-        Reset the display to the current 4-week period containing today.
-        """
-        self.current_start_date = self.calculate_4_week_start()
-        self.selected_week = tuple(datetime.now().isocalendar()[:2])
-        self.refresh_display()
+        Args:
+            start_dt (datetime): Event start datetime.
+            end_dt (datetime): Event end datetime.
 
-    def restore_details(self):
+        Returns:
+            Tuple(int, int): Tuple of start and end minutes since midnight.
         """
-        Restore the display for the current period.
+        start_minutes = start_dt.hour * 60 + start_dt.minute
+        end_minutes = end_dt.hour * 60 + end_dt.minute
+        return (start_minutes, end_minutes)
+
+    # def old_get_busy_bar(self, lop: List[Tuple[int, int]]) -> Tuple[str, str]:
+    #     busy_conf = {x: 0 for x in SLOT_MINUTES}
+    #     # keys = 240, 480, ...
+    #     # values = 0, 1, 2 (0: free, 1: busy, 2: conflict)
+    #     # times in 0 - 240 are charged to 240, in 240 - 480 are charged to 480, etc.
+    #
+    #     busy_minutes = []
+    #     conflict_minutes = []
+    #     lop.sort()
+    #     (b, e) = (0, 0)
+    #     allday = 0
+    #
+    #     for B, E in lop:
+    #         # this event begins at B and ends at E
+    #         if B == 0 and E == 0:  # starts and ends at midnight
+    #             allday += 1
+    #         if E == B and not allday:  # starts and ends at the same time
+    #             continue
+    #         if e <= B:
+    #             # e and b are 0 at the beginning,
+    #             # but remember the relevant begin and ends from previous events
+    #             # if the current event's begin is greater than the last event's end
+    #             # then no conflict, just add the last event to busy_minutes
+    #             busy_minutes.append((b, e))
+    #             b = B
+    #             e = E
+    #         else:
+    #             # if the current event's begin is less than the last event's end
+    #             # then there is a conflict so
+    #             # add b to B (the non overlapping part) to busy_minutes
+    #             # add B to e (the overlapping part) to conflict_minutes if B < e
+    #             # and otherwise add B to E to conflict_minutes
+    #             # and update b and e accordingly
+    #             busy_minutes.append((b, B))
+    #             if e <= E:
+    #                 conflict_minutes.append((B, e))
+    #                 b = e
+    #                 e = E
+    #             else:
+    #                 conflict_minutes.append((B, E))
+    #                 b = E
+    #                 e = e
+    #     # add the last b - e to busy_minutes
+    #     busy_minutes.append((b, e))
+    #
+    #     for b, e in busy_minutes:
+    #         if not e > b:
+    #             continue
+    #         # bisect_left and bisect_right finds the smallest and largest indices
+    #         # in SLOT_MINUTES where b and e can be inserted and maintain the order
+    #         # e.g. if SLOT_MINUTES = [0, 240, 480, 720, 960, 1200, 1440]
+    #         # and b = 300 and e = 900, bisect_left(SLOT_MINUTES, b) = 2,
+    #         # bisect_right(SLOT_MINUTES, e) = 4
+    #         start = bisect_left(SLOT_MINUTES, b)
+    #         end = max(start, bisect_right(SLOT_MINUTES, e) - 1)
+    #         for i in range(start, end + 1):
+    #             busy_conf[SLOT_MINUTES[i]] = 1
+    #
+    #     for b, e in conflict_minutes:
+    #         if not e > b:
+    #             continue
+    #         start = bisect_left(SLOT_MINUTES, b)
+    #         end = max(start, bisect_right(SLOT_MINUTES, e) - 1)
+    #         for i in range(start, end + 1):
+    #             busy_conf[SLOT_MINUTES[i]] = 2
+    #
+    #     busy_bar = ["" for x in SLOT_MINUTES]
+    #     have_busy = False
+    #     for i in range(len(SLOT_MINUTES) - 1):
+    #         if busy_conf[SLOT_MINUTES[i]] == 0:
+    #             busy_bar[i] = f"[dim]{FREE}[/dim]"
+    #         elif busy_conf[SLOT_MINUTES[i]] == 1:
+    #             have_busy = True
+    #             busy_bar[i] = f"[{BUSY_COLOR}]{BUSY}[/{BUSY_COLOR}]"
+    #         else:
+    #             have_busy = True
+    #             busy_bar[i] = f"[{CONF_COLOR}]{BUSY}[/{CONF_COLOR}]"
+    #
+    #     busy_str = (
+    #         f"\n[{FRAME_COLOR}]{''.join(busy_bar)}[/{FRAME_COLOR}]"
+    #         if have_busy
+    #         else "\n"
+    #     )
+    #     aday_str = f"{ADAY}" if allday > 0 else ""
+    #
+    #     return aday_str, busy_str
+
+    def get_busy_bar(self, events):
         """
-        log_msg(
-            f"Restoring details for {self.selected_week = }, {self.current_start_date = }"
+        Determine slot states (0: free, 1: busy, 2: conflict) for a list of events.
+
+        Args:
+            L (List[int]): Sorted list of slot boundaries.
+            events (List[Tuple[int, int]]): List of event tuples (start, end).
+
+        Returns:
+            List[int]: A list where 0 indicates a free slot, 1 indicates a busy slot,
+                    and 2 indicates a conflicting slot.
+        """
+        # Initialize slot usage as empty lists
+        L = SLOT_MINUTES
+        slot_events = [[] for _ in range(len(L) - 1)]
+        allday = 0
+
+        for b, e in events:
+            # Find the start and end slots for the current event
+
+            if b == 0 and e == 0:
+                allday += 1
+            if e == b and not allday:
+                continue
+
+            start_slot = bisect_left(L, b) - 1
+            end_slot = bisect_left(L, e) - 1
+
+            # Track the event in each affected slot
+            for i in range(start_slot, min(len(slot_events), end_slot + 1)):
+                if L[i + 1] > b and L[i] < e:  # Ensure overlap with the slot
+                    slot_events[i].append((b, e))
+
+        # Determine the state of each slot
+        slots_state = []
+        for i, events_in_slot in enumerate(slot_events):
+            if not events_in_slot:
+                # No events in the slot
+                slots_state.append(0)
+            elif len(events_in_slot) == 1:
+                # Only one event in the slot, so it's busy but not conflicting
+                slots_state.append(1)
+            else:
+                # Check for overlaps to determine if there's a conflict
+                events_in_slot.sort()  # Sort events by start time
+                conflict = False
+                for j in range(len(events_in_slot) - 1):
+                    _, end1 = events_in_slot[j]
+                    start2, _ = events_in_slot[j + 1]
+                    if start2 < end1:  # Overlap detected
+                        conflict = True
+                        break
+                slots_state.append(2 if conflict else 1)
+
+        busy_bar = ["_" for _ in range(len(slots_state))]
+        have_busy = False
+        for i in range(len(slots_state)):
+            if slots_state[i] == 0:
+                busy_bar[i] = f"[dim]{FREE}[/dim]"
+            elif slots_state[i] == 1:
+                have_busy = True
+                busy_bar[i] = f"[{BUSY_COLOR}]{BUSY}[/{BUSY_COLOR}]"
+            else:
+                have_busy = True
+                busy_bar[i] = f"[{CONF_COLOR}]{BUSY}[/{CONF_COLOR}]"
+
+        # return slots_state, "".join(busy_bar)
+        busy_str = (
+            f"\n[{FRAME_COLOR}]{''.join(busy_bar)}[/{FRAME_COLOR}]"
+            if have_busy
+            else "\n"
         )
-        # self.current_start_date = self.calculate_4_week_start()
-        # self.selected_week = tuple(self.current_start_date.isocalendar()[:2])
-        self.refresh_display()
 
-    def quit(self):
-        """
-        Exit the application.
-        """
-        self.console.print("[red]Exiting application...[/red]")
-        display_messages()
-        exit()
+        aday_str = f"[{BUSY_COLOR}]{ADAY}[/{BUSY_COLOR}]" if allday > 0 else ""
 
-    def run(self):
-        """
-        Run the 4-week view interactive session.
-        """
-        session = PromptSession(key_bindings=self.key_bindings)
-        self.refresh_display()
-        while True:
-            try:
-                session.prompt("> ")
-            except (EOFError, KeyboardInterrupt):
-                self.quit()
+        return aday_str, busy_str
