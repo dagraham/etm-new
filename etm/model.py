@@ -341,23 +341,23 @@ class DatabaseManager:
 
         return grouped_events
 
-    def event_tuple_to_minutes(
-        self, start_dt: datetime, end_dt: datetime
-    ) -> Tuple[int, int]:
-        """
-        Convert event start and end datetimes to minutes since midnight.
-
-        Args:
-            start_dt (datetime): Event start datetime.
-            end_dt (datetime): Event end datetime.
-
-        Returns:
-            Tuple(int, int): Tuple of start and end minutes since midnight.
-        """
-        start_minutes = start_dt.hour * 60 + start_dt.minute
-        end_minutes = end_dt.hour * 60 + end_dt.minute
-        return (start_minutes, end_minutes)
-
+    # def event_tuple_to_minutes(
+    #     self, start_dt: datetime, end_dt: datetime
+    # ) -> Tuple[int, int]:
+    #     """
+    #     Convert event start and end datetimes to minutes since midnight.
+    #
+    #     Args:
+    #         start_dt (datetime): Event start datetime.
+    #         end_dt (datetime): Event end datetime.
+    #
+    #     Returns:
+    #         Tuple(int, int): Tuple of start and end minutes since midnight.
+    #     """
+    #     start_minutes = start_dt.hour * 60 + start_dt.minute
+    #     end_minutes = end_dt.hour * 60 + end_dt.minute
+    #     return (start_minutes, end_minutes)
+    #
     # def old_get_busy_bar(self, lop: List[Tuple[int, int]]) -> Tuple[str, str]:
     #     busy_conf = {x: 0 for x in SLOT_MINUTES}
     #     # keys = 240, 480, ...
@@ -445,79 +445,79 @@ class DatabaseManager:
     #
     #     return aday_str, busy_str
 
-    def get_busy_bar(self, events):
-        """
-        Determine slot states (0: free, 1: busy, 2: conflict) for a list of events.
-
-        Args:
-            L (List[int]): Sorted list of slot boundaries.
-            events (List[Tuple[int, int]]): List of event tuples (start, end).
-
-        Returns:
-            List[int]: A list where 0 indicates a free slot, 1 indicates a busy slot,
-                    and 2 indicates a conflicting slot.
-        """
-        # Initialize slot usage as empty lists
-        L = SLOT_MINUTES
-        slot_events = [[] for _ in range(len(L) - 1)]
-        allday = 0
-
-        for b, e in events:
-            # Find the start and end slots for the current event
-
-            if b == 0 and e == 0:
-                allday += 1
-            if e == b and not allday:
-                continue
-
-            start_slot = bisect_left(L, b) - 1
-            end_slot = bisect_left(L, e) - 1
-
-            # Track the event in each affected slot
-            for i in range(start_slot, min(len(slot_events), end_slot + 1)):
-                if L[i + 1] > b and L[i] < e:  # Ensure overlap with the slot
-                    slot_events[i].append((b, e))
-
-        # Determine the state of each slot
-        slots_state = []
-        for i, events_in_slot in enumerate(slot_events):
-            if not events_in_slot:
-                # No events in the slot
-                slots_state.append(0)
-            elif len(events_in_slot) == 1:
-                # Only one event in the slot, so it's busy but not conflicting
-                slots_state.append(1)
-            else:
-                # Check for overlaps to determine if there's a conflict
-                events_in_slot.sort()  # Sort events by start time
-                conflict = False
-                for j in range(len(events_in_slot) - 1):
-                    _, end1 = events_in_slot[j]
-                    start2, _ = events_in_slot[j + 1]
-                    if start2 < end1:  # Overlap detected
-                        conflict = True
-                        break
-                slots_state.append(2 if conflict else 1)
-
-        busy_bar = ["_" for _ in range(len(slots_state))]
-        have_busy = False
-        for i in range(len(slots_state)):
-            if slots_state[i] == 0:
-                busy_bar[i] = f"[dim]{FREE}[/dim]"
-            elif slots_state[i] == 1:
-                have_busy = True
-                busy_bar[i] = f"[{BUSY_COLOR}]{BUSY}[/{BUSY_COLOR}]"
-            else:
-                have_busy = True
-                busy_bar[i] = f"[{CONF_COLOR}]{BUSY}[/{CONF_COLOR}]"
-
-        # return slots_state, "".join(busy_bar)
-        busy_str = (
-            f"\n[{FRAME_COLOR}]{''.join(busy_bar)}[/{FRAME_COLOR}]"
-            if have_busy
-            else "\n"
-        )
-
-        aday_str = f"[{BUSY_COLOR}]{ADAY}[/{BUSY_COLOR}]" if allday > 0 else ""
-
-        return aday_str, busy_str
+    # def get_busy_bar(self, events):
+    #     """
+    #     Determine slot states (0: free, 1: busy, 2: conflict) for a list of events.
+    #
+    #     Args:
+    #         L (List[int]): Sorted list of slot boundaries.
+    #         events (List[Tuple[int, int]]): List of event tuples (start, end).
+    #
+    #     Returns:
+    #         List[int]: A list where 0 indicates a free slot, 1 indicates a busy slot,
+    #                 and 2 indicates a conflicting slot.
+    #     """
+    #     # Initialize slot usage as empty lists
+    #     L = SLOT_MINUTES
+    #     slot_events = [[] for _ in range(len(L) - 1)]
+    #     allday = 0
+    #
+    #     for b, e in events:
+    #         # Find the start and end slots for the current event
+    #
+    #         if b == 0 and e == 0:
+    #             allday += 1
+    #         if e == b and not allday:
+    #             continue
+    #
+    #         start_slot = bisect_left(L, b) - 1
+    #         end_slot = bisect_left(L, e) - 1
+    #
+    #         # Track the event in each affected slot
+    #         for i in range(start_slot, min(len(slot_events), end_slot + 1)):
+    #             if L[i + 1] > b and L[i] < e:  # Ensure overlap with the slot
+    #                 slot_events[i].append((b, e))
+    #
+    #     # Determine the state of each slot
+    #     slots_state = []
+    #     for i, events_in_slot in enumerate(slot_events):
+    #         if not events_in_slot:
+    #             # No events in the slot
+    #             slots_state.append(0)
+    #         elif len(events_in_slot) == 1:
+    #             # Only one event in the slot, so it's busy but not conflicting
+    #             slots_state.append(1)
+    #         else:
+    #             # Check for overlaps to determine if there's a conflict
+    #             events_in_slot.sort()  # Sort events by start time
+    #             conflict = False
+    #             for j in range(len(events_in_slot) - 1):
+    #                 _, end1 = events_in_slot[j]
+    #                 start2, _ = events_in_slot[j + 1]
+    #                 if start2 < end1:  # Overlap detected
+    #                     conflict = True
+    #                     break
+    #             slots_state.append(2 if conflict else 1)
+    #
+    #     busy_bar = ["_" for _ in range(len(slots_state))]
+    #     have_busy = False
+    #     for i in range(len(slots_state)):
+    #         if slots_state[i] == 0:
+    #             busy_bar[i] = f"[dim]{FREE}[/dim]"
+    #         elif slots_state[i] == 1:
+    #             have_busy = True
+    #             busy_bar[i] = f"[{BUSY_COLOR}]{BUSY}[/{BUSY_COLOR}]"
+    #         else:
+    #             have_busy = True
+    #             busy_bar[i] = f"[{CONF_COLOR}]{BUSY}[/{CONF_COLOR}]"
+    #
+    #     # return slots_state, "".join(busy_bar)
+    #     busy_str = (
+    #         f"\n[{FRAME_COLOR}]{''.join(busy_bar)}[/{FRAME_COLOR}]"
+    #         if have_busy
+    #         else "\n"
+    #     )
+    #
+    #     aday_str = f"[{BUSY_COLOR}]{ADAY}[/{BUSY_COLOR}]" if allday > 0 else ""
+    #
+    #     return aday_str, busy_str

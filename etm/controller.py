@@ -15,12 +15,15 @@ import re
 import inspect
 from rich.theme import Theme
 from rich import box
+from typing import List, Tuple, Dict
+from bisect import bisect_left, bisect_right
 
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.keys import Keys
 from prompt_toolkit.shortcuts import PromptSession
 import string
 import shutil
+from .model import DatabaseManager
 
 from .common import log_msg, display_messages
 
@@ -40,6 +43,14 @@ TODAY_COLOR = NAMED_COLORS["Tomato"]
 # SELECTED_BACKGROUND = "#4d4d4d"
 SELECTED_BACKGROUND = "#5d5d5d"
 
+BUSY_COLOR = NAMED_COLORS["YellowGreen"]
+CONF_COLOR = NAMED_COLORS["Tomato"]
+FRAME_COLOR = NAMED_COLORS["DimGrey"]
+SLOT_HOURS = [0, 4, 8, 12, 16, 20, 24]
+SLOT_MINUTES = [x * 60 for x in SLOT_HOURS]
+BUSY = "■"  # U+25A0 this will be busy_bar busy and conflict character
+FREE = "□"  # U+25A1 this will be busy_bar free character
+ADAY = "━"  # U+2501 for all day events ━
 
 # SELECTED_COLOR = NAMED_COLORS["Yellow"]
 SELECTED_COLOR = "bold yellow"
@@ -76,6 +87,44 @@ def format_date_range(start_dt: datetime, end_dt: datetime):
         return f"{start_dt.strftime('%B %-d')} - {end_dt.strftime('%B %-d, %Y')}"
     else:
         return f"{start_dt.strftime('%B %-d, %Y')} - {end_dt.strftime('%B %-d, %Y')}"
+
+
+def get_previous_yrwk(year, week):
+    """
+    Get the previous (year, week) from an ISO calendar (year, week).
+    """
+    # Convert the ISO year and week to a Monday date
+    monday_date = datetime.strptime(f"{year} {week} 1", "%G %V %u")
+    # Subtract 1 week
+    previous_monday = monday_date - timedelta(weeks=1)
+    # Get the ISO year and week of the new date
+    return previous_monday.isocalendar()[:2]
+
+
+def get_next_yrwk(year, week):
+    """
+    Get the next (year, week) from an ISO calendar (year, week).
+    """
+    # Convert the ISO year and week to a Monday date
+    monday_date = datetime.strptime(f"{year} {week} 1", "%G %V %u")
+    # Add 1 week
+    next_monday = monday_date + timedelta(weeks=1)
+    # Get the ISO year and week of the new date
+    return next_monday.isocalendar()[:2]
+
+
+def calculate_4_week_start():
+    """
+    Calculate the starting date of the 4-week period, starting on a Monday.
+    """
+    today = datetime.now()
+    iso_year, iso_week, iso_weekday = today.isocalendar()
+    # start_of_week = datetime.strptime(
+    #     " ".join(map(str, [iso_year, iso_week, 1])), "%G %V %u"
+    # )
+    start_of_week = today - timedelta(days=iso_weekday - 1)
+    weeks_into_cycle = (iso_week - 1) % 4
+    return start_of_week - timedelta(weeks=weeks_into_cycle)
 
 
 def decimal_to_base26(decimal_num):
@@ -156,49 +205,110 @@ def base26_to_decimal(base26_num):
     return decimal_value
 
 
-def get_previous_yrwk(year, week):
+def event_tuple_to_minutes(start_dt: datetime, end_dt: datetime) -> Tuple[int, int]:
     """
-    Get the previous (year, week) from an ISO calendar (year, week).
+    Convert event start and end datetimes to minutes since midnight.
+
+    Args:
+        start_dt (datetime): Event start datetime.
+        end_dt (datetime): Event end datetime.
+
+    Returns:
+        Tuple(int, int): Tuple of start and end minutes since midnight.
     """
-    # Convert the ISO year and week to a Monday date
-    monday_date = datetime.strptime(f"{year} {week} 1", "%G %V %u")
-    # Subtract 1 week
-    previous_monday = monday_date - timedelta(weeks=1)
-    # Get the ISO year and week of the new date
-    return previous_monday.isocalendar()[:2]
+    start_minutes = start_dt.hour * 60 + start_dt.minute
+    end_minutes = end_dt.hour * 60 + end_dt.minute
+    return (start_minutes, end_minutes)
 
 
-def get_next_yrwk(year, week):
+def get_busy_bar(events):
     """
-    Get the next (year, week) from an ISO calendar (year, week).
+    Determine slot states (0: free, 1: busy, 2: conflict) for a list of events.
+
+    Args:
+        L (List[int]): Sorted list of slot boundaries.
+        events (List[Tuple[int, int]]): List of event tuples (start, end).
+
+    Returns:
+        List[int]: A list where 0 indicates a free slot, 1 indicates a busy slot,
+                and 2 indicates a conflicting slot.
     """
-    # Convert the ISO year and week to a Monday date
-    monday_date = datetime.strptime(f"{year} {week} 1", "%G %V %u")
-    # Add 1 week
-    next_monday = monday_date + timedelta(weeks=1)
-    # Get the ISO year and week of the new date
-    return next_monday.isocalendar()[:2]
+    # Initialize slot usage as empty lists
+    L = SLOT_MINUTES
+    slot_events = [[] for _ in range(len(L) - 1)]
+    allday = 0
+
+    for b, e in events:
+        # Find the start and end slots for the current event
+
+        if b == 0 and e == 0:
+            allday += 1
+        if e == b and not allday:
+            continue
+
+        start_slot = bisect_left(L, b) - 1
+        end_slot = bisect_left(L, e) - 1
+
+        # Track the event in each affected slot
+        for i in range(start_slot, min(len(slot_events), end_slot + 1)):
+            if L[i + 1] > b and L[i] < e:  # Ensure overlap with the slot
+                slot_events[i].append((b, e))
+
+    # Determine the state of each slot
+    slots_state = []
+    for i, events_in_slot in enumerate(slot_events):
+        if not events_in_slot:
+            # No events in the slot
+            slots_state.append(0)
+        elif len(events_in_slot) == 1:
+            # Only one event in the slot, so it's busy but not conflicting
+            slots_state.append(1)
+        else:
+            # Check for overlaps to determine if there's a conflict
+            events_in_slot.sort()  # Sort events by start time
+            conflict = False
+            for j in range(len(events_in_slot) - 1):
+                _, end1 = events_in_slot[j]
+                start2, _ = events_in_slot[j + 1]
+                if start2 < end1:  # Overlap detected
+                    conflict = True
+                    break
+            slots_state.append(2 if conflict else 1)
+
+    busy_bar = ["_" for _ in range(len(slots_state))]
+    have_busy = False
+    for i in range(len(slots_state)):
+        if slots_state[i] == 0:
+            busy_bar[i] = f"[dim]{FREE}[/dim]"
+        elif slots_state[i] == 1:
+            have_busy = True
+            busy_bar[i] = f"[{BUSY_COLOR}]{BUSY}[/{BUSY_COLOR}]"
+        else:
+            have_busy = True
+            busy_bar[i] = f"[{CONF_COLOR}]{BUSY}[/{CONF_COLOR}]"
+
+    # return slots_state, "".join(busy_bar)
+    busy_str = (
+        f"\n[{FRAME_COLOR}]{''.join(busy_bar)}[/{FRAME_COLOR}]" if have_busy else "\n"
+    )
+
+    aday_str = f"[{BUSY_COLOR}]{ADAY}[/{BUSY_COLOR}]" if allday > 0 else ""
+
+    return aday_str, busy_str
 
 
-class FourWeekView:
-    def __init__(self, db_manager, bindings):
-        """
-        Initialize the FourWeekView with a database manager.
-        """
-        self.db_manager = db_manager
-        self.console = Console(theme=Theme({}))
-        self.current_start_date = self.calculate_4_week_start()
-        self.key_bindings = bindings
-        self.digit_buffer = []  # Buffer for storing two-digit input
-        self.showing_item = False
+class Controller:
+    def __init__(self, database_path: str):
+        # Initialize the database manager
+        self.db_manager = DatabaseManager(database_path)
+        self.tag_to_id = {}  # Maps tag numbers to event IDs
+        self.yrwk_to_details = {}  # Maps (iso_year, iso_week), to the details for that week
+        self.rownum_to_yrwk = {}  # Maps row numbers to (iso_year, iso_week) for the current period
+        start_date = calculate_4_week_start()
         self.selected_week = tuple(
             datetime.now().isocalendar()[:2]
         )  # Currently selected week
-        self.yrwk_to_details = {}  # Maps (iso_year, iso_week), to the details for that week
-        self.rownum_to_yrwk = {}  # Maps row numbers to (iso_year, iso_week) for the current period
-        self.afill = 1
         self.tag_to_id = {}  # Maps tag numbers to event IDs
-        self.setup_key_bindings()
 
     def get_record_details_as_string(self, record_id):
         """
@@ -233,63 +343,6 @@ class FourWeekView:
         # log_msg(f"Content: {content}")
         return content
 
-    def bind_keys(self, bindings):
-        """
-        Bind keys dynamically based on the current `afill` value.
-        """
-        for char in "abcdefghijklmnopqrstuvwxyz":
-
-            @bindings.add(char)
-            def _(event, char=char):
-                self.digit_buffer.append(char)
-                if len(self.digit_buffer) == self.afill:
-                    base26_tag = "".join(self.digit_buffer)
-                    self.digit_buffer.clear()
-                    self.process_tag(base26_tag)
-
-    def setup_key_bindings(self):
-        """
-        Set up key bindings for navigation, actions, and date selection.
-        """
-        # bindings = KeyBindings()
-
-        # Navigation
-        self.key_bindings.add("right")(lambda _: self.move_next_period())
-        self.key_bindings.add("down")(lambda _: self.move_next_week())
-        self.key_bindings.add("left")(lambda _: self.move_previous_period())
-        self.key_bindings.add("up")(lambda _: self.move_previous_week())
-        self.key_bindings.add("space")(lambda _: self.reset_to_today())
-        self.key_bindings.add("0")(lambda _: self.restore_details())
-        self.key_bindings.add("Q")(lambda _: self.quit())
-
-        # Add key bindings for digits
-        for digit in [str(x) for x in range(1, 5)]:
-
-            @self.key_bindings.add(digit)
-            def _(_, digit=digit):
-                # log_msg(f"Processing digit: {digit}, {type(digit) = }")
-                yr_wk = self.rownum_to_yrwk[int(digit)]
-                # log_msg(f"Selected week: {yr_wk}")
-                self.selected_week = yr_wk
-                self.refresh_display()
-
-        for char in "abcdefghijklmnopqrstuvwxyz":
-
-            @self.key_bindings.add(char)
-            def _(event, char=char):
-                self.digit_buffer.append(char)
-                if len(self.digit_buffer) == self.afill:
-                    base26_tag = "".join(self.digit_buffer)
-                    self.digit_buffer.clear()
-                    self.process_tag(base26_tag)
-
-        @self.key_bindings.add("escape", eager=True)
-        def _(event):
-            """
-            Restore the display when Escape is pressed.
-            """
-            self.restore_details()
-
     def process_tag(self, tag):
         """
         Process the base26 tag entered by the user.
@@ -307,27 +360,12 @@ class FourWeekView:
         else:
             self.refresh_display(details=f"[red]Invalid tag: '{tag}'[/red]")
 
-    def calculate_4_week_start(self):
-        """
-        Calculate the starting date of the 4-week period, starting on a Monday.
-        """
-        today = datetime.now()
-        iso_year, iso_week, iso_weekday = today.isocalendar()
-        # start_of_week = datetime.strptime(
-        #     " ".join(map(str, [iso_year, iso_week, 1])), "%G %V %u"
-        # )
-        start_of_week = today - timedelta(days=iso_weekday - 1)
-        weeks_into_cycle = (iso_week - 1) % 4
-        return start_of_week - timedelta(weeks=weeks_into_cycle)
-
-    def generate_table(self, grouped_events):
+    def generate_table(self, start_date, grouped_events):
         """
         Generate a Rich table displaying events for the specified 4-week period.
         """
-        end_date = (
-            self.current_start_date + timedelta(weeks=4) - ONEDAY
-        )  # End on a Sunday
-        start_date = self.current_start_date
+        end_date = start_date + timedelta(weeks=4) - ONEDAY  # End on a Sunday
+        start_date = start_date
         today_year, today_week, today_weekday = datetime.now().isocalendar()
         tomorrow_year, tomorrow_week, tomorrow_day = (
             datetime.now() + ONEDAY
@@ -349,7 +387,7 @@ class FourWeekView:
             table.add_column(day, justify="center", style=DAY_COLOR, width=10, ratio=1)
 
         self.rownum_to_details = {}  # Reset for this period
-        current_date = self.current_start_date
+        current_date = start_date
         weeks = []
         row_num = 0
         while current_date <= end_date:
@@ -390,11 +428,8 @@ class FourWeekView:
                     mday = f"[bold][{TODAY_COLOR}]{monthday_str}[/{TODAY_COLOR}][/bold]"
 
                 if events:
-                    tups = [
-                        self.db_manager.event_tuple_to_minutes(ev[0], ev[1])
-                        for ev in events
-                    ]
-                    aday_str, busy_str = self.db_manager.get_busy_bar(tups)
+                    tups = [event_tuple_to_minutes(ev[0], ev[1]) for ev in events]
+                    aday_str, busy_str = get_busy_bar(tups)
                     # log_msg(f"{date = }, {tups = }, {busy_str = }")
                     if aday_str:
                         row.append(f"{aday_str} {mday} {aday_str}{busy_str}")
@@ -416,7 +451,9 @@ class FourWeekView:
 
         return title, table
 
-    def refresh_display(self, details=None):
+    def refresh_display(
+        self, start_date: datetime, selected_week: Tuple[int, int], details: str = None
+    ):
         """
         Refresh the display by fetching and processing events, generating the table,
         and rendering the details below the table in a panel group.
@@ -428,27 +465,25 @@ class FourWeekView:
         tomorrow_year, tomorrow_week, tomorrow_day = (
             datetime.now() + ONEDAY
         ).isocalendar()
-        current_start_year, current_start_week, _ = (
-            self.current_start_date.isocalendar()
-        )
+        current_start_year, current_start_week, _ = start_date.isocalendar()
         self.db_manager.extend_datetimes_for_weeks(
             current_start_year, current_start_week, 4
         )
         grouped_events = self.db_manager.process_events(
-            self.current_start_date, self.current_start_date + timedelta(weeks=4)
+            start_date, start_date + timedelta(weeks=4)
         )
 
         terminal_width = shutil.get_terminal_size().columns
         # Generate the table
-        title, table = self.generate_table(grouped_events)
+        title, table = self.generate_table(start_date, grouped_events)
         title = (
             f"[bold][{HEADER_COLOR}]{title:^{terminal_width}}[/{HEADER_COLOR}][/bold]"
         )
 
         instructions = f"""[{DIM_COLOR}]
- Cursor keys: left/right scroll 4 weeks, up/down scroll 1 week
- 1, 2, 3, 4: list items for week, Q: quit application
- a, b, ...: display details for item, 0: restore item list[/{DIM_COLOR}]"""
+    Cursor keys: left/right scroll 4 weeks, up/down scroll 1 week
+    1, 2, 3, 4: list items for week, Q: quit application
+    a, b, ...: display details for item, 0: restore item list[/{DIM_COLOR}]"""
 
         # Check if details were provided
         if details is None:
@@ -471,10 +506,9 @@ class FourWeekView:
             instructions,
             # Panel(instructions, border_style=f"{DIM_COLOR}", box=box.SQUARE),
         )
-
+        return panel_group
         # Clear the console and render the panel group
-        self.console.clear()
-        self.console.print(panel_group)
+        # self.console.print(panel_group)
 
     def get_week_details(self, yr_wk):
         """
@@ -565,78 +599,3 @@ class FourWeekView:
         details_str = "\n".join(details)
         self.yrwk_to_details[yr_wk] = details_str
         return details_str
-
-    def move_next_period(self):
-        """
-        Move to the next 4-week period.
-        """
-        self.current_start_date += timedelta(weeks=4)
-        self.selected_week = tuple(self.current_start_date.isocalendar()[:2])
-        self.refresh_display()
-
-    def move_next_week(self):
-        """
-        Move to the next week in the current 4-week period.
-        """
-        self.selected_week = get_next_yrwk(*self.selected_week)
-        if self.selected_week > tuple(
-            (self.current_start_date + timedelta(weeks=4) - ONEDAY).isocalendar()[:2]
-        ):
-            self.current_start_date += timedelta(weeks=1)
-        self.refresh_display()
-
-    def move_previous_period(self):
-        """
-        Move to the previous 4-week period.
-        """
-        self.current_start_date -= timedelta(weeks=4)
-        self.selected_week = tuple(self.current_start_date.isocalendar()[:2])
-        self.refresh_display()
-
-    def move_previous_week(self):
-        """
-        Move to the previous week in the current 4-week period.
-        """
-        self.selected_week = get_previous_yrwk(*self.selected_week)
-        if self.selected_week < tuple((self.current_start_date).isocalendar()[:2]):
-            self.current_start_date -= timedelta(weeks=1)
-        self.refresh_display()
-
-    def reset_to_today(self):
-        """
-        Reset the display to the current 4-week period containing today.
-        """
-        self.current_start_date = self.calculate_4_week_start()
-        self.selected_week = tuple(datetime.now().isocalendar()[:2])
-        self.refresh_display()
-
-    def restore_details(self):
-        """
-        Restore the display for the current period.
-        """
-        log_msg(
-            f"Restoring details for {self.selected_week = }, {self.current_start_date = }"
-        )
-        # self.current_start_date = self.calculate_4_week_start()
-        # self.selected_week = tuple(self.current_start_date.isocalendar()[:2])
-        self.refresh_display()
-
-    def quit(self):
-        """
-        Exit the application.
-        """
-        self.console.print("[red]Exiting application...[/red]")
-        display_messages()
-        exit()
-
-    def run(self):
-        """
-        Run the 4-week view interactive session.
-        """
-        session = PromptSession(key_bindings=self.key_bindings)
-        self.refresh_display()
-        while True:
-            try:
-                session.prompt("> ")
-            except (EOFError, KeyboardInterrupt):
-                self.quit()
