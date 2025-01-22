@@ -876,6 +876,14 @@ def decode_datetime(s):
         return datetime.strptime(s, NAIVE_FMT).astimezone(None)
 
 
+def truncate_string(s: str, max_length: int) -> str:
+    log_msg(f"Truncating string '{s}' to {max_length} characters")
+    if len(s) > max_length:
+        return f"{s[: max_length - 2]} {EtmChar.ELLIPSIS_CHAR}"
+    else:
+        return s
+
+
 class Period:
     def __init__(self, datetime1, datetime2):
         # datetime1: done/start; datetime2: due/end. On time => period positive

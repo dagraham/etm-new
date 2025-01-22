@@ -304,10 +304,10 @@ class Controller:
         self.tag_to_id = {}  # Maps tag numbers to event IDs
         self.yrwk_to_details = {}  # Maps (iso_year, iso_week), to the details for that week
         self.rownum_to_yrwk = {}  # Maps row numbers to (iso_year, iso_week) for the current period
-        start_date = calculate_4_week_start()
-        self.selected_week = tuple(
-            datetime.now().isocalendar()[:2]
-        )  # Currently selected week
+        # self.start_date = calculate_4_week_start()
+        # self.selected_week = tuple(
+        #     datetime.now().isocalendar()[:2]
+        # )  # Currently selected week
         self.tag_to_id = {}  # Maps tag numbers to event IDs
 
     def get_record_details_as_string(self, record_id):
@@ -343,24 +343,22 @@ class Controller:
         # log_msg(f"Content: {content}")
         return content
 
-    def process_tag(self, tag):
+    def process_tag(self, tag, selected_week):
         """
         Process the base26 tag entered by the user.
 
         Args:
             tag (str): The tag corresponding to a record.
         """
-        if tag in self.tag_to_id[self.selected_week]:
-            record_id = self.tag_to_id[self.selected_week][tag]
+        if tag in self.tag_to_id[selected_week]:
+            record_id = self.tag_to_id[selected_week][tag]
             # log_msg(f"Tag '{tag}' corresponds to record ID {record_id}")
             details = self.get_record_details_as_string(record_id)
-            self.showing_item = True
-            # log_msg(f"got {details = }")
-            self.refresh_display(details=details)
-        else:
-            self.refresh_display(details=f"[red]Invalid tag: '{tag}'[/red]")
+            return details
 
-    def generate_table(self, start_date, grouped_events):
+        return f"[red]Invalid tag: '{tag}'[/red]"
+
+    def generate_table(self, start_date, selected_week, grouped_events):
         """
         Generate a Rich table displaying events for the specified 4-week period.
         """
@@ -379,6 +377,8 @@ class Controller:
             style=FRAME_COLOR,
             expand=True,
             box=box.SQUARE,
+            title=title,
+            title_style="bold",
         )
 
         weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
@@ -398,7 +398,7 @@ class Controller:
             row_num += 1
             self.rownum_to_yrwk[row_num] = yr_wk
             row = [f"[{DIM_COLOR}]{row_num}[{DIM_COLOR}]\n"]
-            SELECTED = yr_wk == self.selected_week
+            SELECTED = yr_wk == selected_week
             row = (
                 [f"[{SELECTED_COLOR}]{row_num}[/{SELECTED_COLOR}]\n"]
                 if SELECTED
@@ -449,17 +449,18 @@ class Controller:
             self.yrwk_to_details[yr_wk] = self.get_week_details((iso_year, iso_week))
             current_date += timedelta(weeks=1)
 
-        return title, table
+        return table
 
-    def refresh_display(
-        self, start_date: datetime, selected_week: Tuple[int, int], details: str = None
-    ):
+    def get_table_and_list(self, start_date: datetime, selected_week: Tuple[int, int]):
         """
-        Refresh the display by fetching and processing events, generating the table,
-        and rendering the details below the table in a panel group.
-
-        Args:
-            details (str, optional): The details to display below the table. Defaults to None.
+        - rich_display(start_datetime, selected_week)
+            - sets:
+                self.tag_to_id = {}  # Maps tag numbers to event IDs
+                self.yrwk_to_details = {}  # Maps (iso_year, iso_week), to the details for that week
+                self.rownum_to_yrwk = {}  # Maps row numbers to (iso_year, iso_week) for the current period
+            - return title
+            - return table
+            - return details for selected_week
         """
         today_year, today_week, today_weekday = datetime.now().isocalendar()
         tomorrow_year, tomorrow_week, tomorrow_day = (
@@ -475,45 +476,19 @@ class Controller:
 
         terminal_width = shutil.get_terminal_size().columns
         # Generate the table
-        title, table = self.generate_table(start_date, grouped_events)
-        title = (
-            f"[bold][{HEADER_COLOR}]{title:^{terminal_width}}[/{HEADER_COLOR}][/bold]"
-        )
+        table = self.generate_table(start_date, selected_week, grouped_events)
 
-        instructions = f"""[{DIM_COLOR}]
-    Cursor keys: left/right scroll 4 weeks, up/down scroll 1 week
-    1, 2, 3, 4: list items for week, Q: quit application
-    a, b, ...: display details for item, 0: restore item list[/{DIM_COLOR}]"""
-
-        # Check if details were provided
-        if details is None:
-            # Auto-select today's date if within the displayed period
-            today = datetime.now()
-            today_str = today.strftime("%-d")  # Month day without leading zero
-
-            # Default to the details for the selected week
-            if self.selected_week in self.yrwk_to_details:
-                details = self.yrwk_to_details[self.selected_week]
-            else:
-                details = "No week selected."
-
-        # Create a panel group for the table and details
-        panel_group = Group(
-            title,
-            table,
-            # Panel(details, border_style=f"{FRAME_COLOR}", box=box.SQUARE, ),
-            details,
-            instructions,
-            # Panel(instructions, border_style=f"{DIM_COLOR}", box=box.SQUARE),
-        )
-        return panel_group
-        # Clear the console and render the panel group
-        # self.console.print(panel_group)
+        if selected_week in self.yrwk_to_details:
+            details = self.yrwk_to_details[selected_week]
+        else:
+            details = "No week selected."
+        return table, details
 
     def get_week_details(self, yr_wk):
         """
         Fetch and format details for a specific week.
         """
+        log_msg(f"Getting details for week {yr_wk}")
         today_year, today_week, today_weekday = datetime.now().isocalendar()
         tomorrow_year, tomorrow_week, tomorrow_day = (
             datetime.now() + ONEDAY
@@ -527,9 +502,7 @@ class Controller:
         terminal_width = shutil.get_terminal_size().columns
 
         header = f"Items for {this_week} #{yr_wk[1]} ({len(events)})"
-        details = [
-            f"[not bold][{HEADER_COLOR}]{header:^{terminal_width}}[/{HEADER_COLOR}][/not bold]"
-        ]
+        details = [f"[not bold][{HEADER_COLOR}]{header}[/{HEADER_COLOR}][/not bold]"]
 
         if not events:
             details.append(
@@ -552,10 +525,16 @@ class Controller:
             # log_msg(f"Week details {name = }, {start_dt = }, {end_dt = }")
 
             if start_dt == end_dt:
-                if start_dt.hour == 0 and start_dt.minute == 0:
-                    start_end = ""
+                if start_dt.hour == 0 and start_dt.minute == 0 and start_dt.second == 0:
+                    start_end = f"{str('~'):^11}"
+                elif (
+                    start_dt.hour == 23
+                    and start_dt.minute == 59
+                    and start_dt.second == 59
+                ):
+                    start_end = f"{str('~'):^11}"
                 else:
-                    start_end = start_dt.strftime("%H:%M")
+                    start_end = f"{start_dt.strftime('%H:%M'):^11}"
             else:
                 start_end = f"{start_dt.strftime('%H:%M')}-{end_dt.strftime('%H:%M')}"
 
@@ -592,10 +571,12 @@ class Controller:
                 )
                 for event in events:
                     event_id, event_str = event
+                    # log_msg(f"{event_str = }")
                     tag = indx_to_tag(indx, self.afill)
                     self.tag_to_id[yr_wk][tag] = event_id
-                    details.append(f"  [dim]{tag}[/dim]  {event_str} {event_id}")
+                    details.append(f"  [dim]{tag}[/dim]  {event_str}")
                     indx += 1
-        details_str = "\n".join(details)
-        self.yrwk_to_details[yr_wk] = details_str
-        return details_str
+        # NOTE: maybe return list for scrollable view?
+        # details_str = "\n".join(details)
+        self.yrwk_to_details[yr_wk] = details
+        return details

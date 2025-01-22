@@ -173,14 +173,15 @@ class FourWeekView:
         self.console = Console(theme=Theme({}))
         self.current_start_date = calculate_4_week_start()
         self.digit_buffer = []  # Buffer for storing two-digit input
-        self.showing_item = False
         self.selected_week = tuple(
             datetime.now().isocalendar()[:2]
         )  # Currently selected week
         self.yrwk_to_details = {}  # Maps (iso_year, iso_week), to the details for that week
+
         self.rownum_to_yrwk = {}  # Maps row numbers to (iso_year, iso_week) for the current period
         self.afill = 1
         self.tag_to_id = {}  # Maps tag numbers to event IDs
+        self.scroll_offset = 0  # Keeps track of scrolling position
         self.setup_key_bindings()
 
     def bind_keys(self, bindings):
@@ -195,7 +196,7 @@ class FourWeekView:
                 if len(self.digit_buffer) == self.afill:
                     base26_tag = "".join(self.digit_buffer)
                     self.digit_buffer.clear()
-                    self.process_tag(base26_tag)
+                    self.process_tag(base26_tag, self.selected_week)
 
     def setup_key_bindings(self):
         """
@@ -210,6 +211,8 @@ class FourWeekView:
         self.key_bindings.add("up")(lambda _: self.move_previous_week())
         self.key_bindings.add("space")(lambda _: self.reset_to_today())
         self.key_bindings.add("0")(lambda _: self.restore_details())
+        self.key_bindings.add(">")(lambda _: self.handle_key(">"))
+        self.key_bindings.add("<")(lambda _: self.handle_key("<"))
         self.key_bindings.add("Q")(lambda _: self.quit())
 
         # Add key bindings for digits
@@ -233,7 +236,7 @@ class FourWeekView:
                 if len(self.digit_buffer) == self.afill:
                     base26_tag = "".join(self.digit_buffer)
                     self.digit_buffer.clear()
-                    self.process_tag(base26_tag)
+                    self.controller.process_tag(base26_tag, self.selected_week)
 
         @self.key_bindings.add("escape", eager=True)
         def _(event):
@@ -241,6 +244,16 @@ class FourWeekView:
             Restore the display when Escape is pressed.
             """
             self.restore_details()
+
+    def handle_key(self, key: str):
+        """
+        Handle key presses for scrolling.
+        """
+        if key == ">":
+            self.scroll_offset += 1
+        elif key == "<":
+            self.scroll_offset -= 1
+        self.display_panel(self.scroll_offset)  # Redraw the panel
 
     def move_next_period(self):
         """
@@ -301,16 +314,123 @@ class FourWeekView:
         # self.controller.refresh_display(self.current_start_date, self.selected_week)
         self.display_panel()
 
-    def display_panel(self):
+    # def display_panel(self):
+    #     """
+    #     Display the table for the current period and the list of items for teh current selected week.
+    #     """
+    #     log_msg(
+    #         f"Displaying panel for {self.current_start_date = } and {self.selected_week = }"
+    #     )
+    #
+    #     table, details = self.controller.get_table_and_list(
+    #         self.current_start_date, self.selected_week
+    #     )
+    #     shut_width, shut_height = shutil.get_terminal_size()
+    #     log_msg(f"shut = {shut_width}, {shut_height}")
+    #     details_str = "\n".join(details[1:])
+    #     title_str = f"{details[0]}"
+    #
+    #     layout = Layout(name="root")
+    #
+    #     layout.split_column(
+    #         Layout(name="placeholder", size=1),  # dummy placeholder
+    #         Layout(name="table", size=16),
+    #         Layout(name="details", size=shut_height - 17),
+    #     )
+    #     layout["table"].update(table)
+    #     layout["details"].update(Panel(details_str, box=box.SIMPLE, title=title_str))
+    #
+    #     self.console.clear()
+    #     self.console.print(layout, no_wrap=True, overflow="ellipsis")
+
+    def display_panel(self, offset=0):
+        """
+        Display the table for the current period and the list of items for the current selected week,
+        with scroll indicators if there are hidden rows.
+        """
         log_msg(
             f"Displaying panel for {self.current_start_date = } and {self.selected_week = }"
         )
-        panel = self.controller.refresh_display(
+
+        table, details = self.controller.get_table_and_list(
             self.current_start_date, self.selected_week
         )
-        log_msg(f"Displaying panel: {panel}")
+        details_title = details.pop(0)
+        shut_width, shut_height = shutil.get_terminal_size()
+        log_msg(f"shut = {shut_width}, {shut_height}")
+
+        visible_height = shut_height - 17
+
+        # len(details) + 2 is the total number of rows in the details panel including the title and subtitle/scroll message
+        self.scroll_offset = max(
+            0, min(offset, max(0, len(details) + 2 - visible_height))
+        )
+
+        max_scroll = max(
+            0, len(details) + 2 - visible_height - self.scroll_offset
+        )  # Maximum scroll offset
+
+        log_msg(
+            f"{self.scroll_offset = },  {len(details) = }, {visible_height = }, {max_scroll = }"
+        )
+
+        # Ensure scroll_offset is within bounds
+
+        # Adjust visible height for indicators (if applicable)
+        show_above = self.scroll_offset > 0
+        # show_below = self.scroll_offset + visible_height < len(details)
+        show_below = max_scroll > 0
+
+        reserved_height = int(show_above) + int(show_below)  # Space for indicators
+        adjusted_height = visible_height - reserved_height  # Remaining space for rows
+
+        # Get the visible portion of the details
+        visible_details = details[
+            self.scroll_offset : self.scroll_offset + adjusted_height
+        ]
+
+        # Add scroll indicators within the visible area
+        scroll_msgs = []
+        if show_above:
+            scroll_msgs.append("up: <")
+            # visible_details.insert(
+            #     0, "▲ More above ▲"
+            # )  # Indicator for hidden rows above
+        if show_below:
+            scroll_msgs.append("down: >")
+            # visible_details.insert(
+            #     len(visible_details) - 2, "▼ More below ▼"
+            # )  # Indicator for hidden rows below
+        scroll_msg = (
+            "Scroll " + " or ".join(scroll_msgs) + " for more items"
+            if scroll_msgs
+            else ""
+        )
+
+        details_str = "\n".join(visible_details)
+
+        layout = Layout(name="root")
+
+        layout.split_column(
+            Layout(name="placeholder", size=1),  # dummy placeholder
+            Layout(name="table", size=16),
+            Layout(name="details", size=visible_height),
+        )
+        layout["table"].update(table)
+        layout["details"].update(
+            Panel(
+                details_str,
+                box=box.SIMPLE,
+                title=details_title,
+                subtitle=f"{scroll_msg}",
+            )
+        )
+
         self.console.clear()
-        self.console.print(panel)
+        self.console.print(layout, no_wrap=True, overflow="ellipsis")
+
+    def display_tag(self, tag):
+        tag_str = self.controller.get_tag_str(tag, self.selected_week)
 
     def quit(self):
         """
@@ -329,6 +449,6 @@ class FourWeekView:
         self.display_panel()
         while True:
             try:
-                session.prompt("> ")
+                session.prompt("")
             except (EOFError, KeyboardInterrupt):
                 self.quit()
