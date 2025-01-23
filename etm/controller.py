@@ -488,7 +488,7 @@ class Controller:
         """
         Fetch and format details for a specific week.
         """
-        log_msg(f"Getting details for week {yr_wk}")
+        # log_msg(f"Getting details for week {yr_wk}")
         today_year, today_week, today_weekday = datetime.now().isocalendar()
         tomorrow_year, tomorrow_week, tomorrow_day = (
             datetime.now() + ONEDAY
