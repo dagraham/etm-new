@@ -65,30 +65,6 @@ TYPE_TO_COLOR = {
 }
 
 
-# import inspect
-# from rich import print as rprint
-#
-# DEFAULT_LOG_FILE = "log_msg.txt"
-#
-#
-# def log_msg(msg: str, file_path: str = DEFAULT_LOG_FILE):
-#     """
-#     Log a message and save it directly to a specified file.
-#
-#     Args:
-#         msg (str): The message to log.
-#         file_path (str, optional): Path to the log file. Defaults to "log_msg.txt".
-#     """
-#     caller_name = inspect.stack()[1].function
-#     formatted_msg = f"[yellow]{caller_name}[/yellow]:\n  {msg}"
-#
-#     # Save the message to the file
-#     with open(file_path, "a") as f:
-#         f.write(f"{formatted_msg}\n")
-#
-#
-
-
 def format_date_range(start_dt: datetime, end_dt: datetime):
     """
     Format a datetime object as a week string, taking not to repeat the month name unless the week spans two months.
@@ -221,14 +197,14 @@ class FourWeekView:
         """
 
         # Navigation
-        self.bindings.add("right")(lambda _: self.move_next_period())
-        self.bindings.add("down")(lambda _: self.move_next_week())
-        self.bindings.add("left")(lambda _: self.move_previous_period())
-        self.bindings.add("up")(lambda _: self.move_previous_week())
+        self.bindings.add("s-right")(lambda _: self.move_next_period())
+        self.bindings.add("right")(lambda _: self.move_next_week())
+        self.bindings.add("s-left")(lambda _: self.move_previous_period())
+        self.bindings.add("left")(lambda _: self.move_previous_week())
         self.bindings.add("space")(lambda _: self.reset_to_today())
         self.bindings.add("0")(lambda _: self.restore_details())
-        self.bindings.add(">")(lambda _: self.handle_key(">"))
-        self.bindings.add("<")(lambda _: self.handle_key("<"))
+        self.bindings.add("down")(lambda _: self.handle_key(">"))
+        self.bindings.add("up")(lambda _: self.handle_key("<"))
         self.bindings.add("Q")(lambda _: self.quit())
 
         # Add key bindings for digits
@@ -279,7 +255,6 @@ class FourWeekView:
         """
         self.current_start_date += timedelta(weeks=4)
         self.selected_week = tuple(self.current_start_date.isocalendar()[:2])
-        # self.controller.refresh_display(self.current_start_date, self.selected_week)
         self.display_panel()
 
     def move_next_week(self):
@@ -291,7 +266,6 @@ class FourWeekView:
             (self.current_start_date + timedelta(weeks=4) - ONEDAY).isocalendar()[:2]
         ):
             self.current_start_date += timedelta(weeks=1)
-        # self.controller.refresh_display(self.current_start_date, self.selected_week)
         self.display_panel()
 
     def move_previous_period(self):
@@ -337,16 +311,12 @@ class FourWeekView:
         Display the table for the current period and the list of items for the current selected week,
         with scroll indicators if there are hidden rows.
         """
-        # log_msg(
-        #     f"Displaying panel for {self.current_start_date = } and {self.selected_week = }"
-        # )
 
         table, details = self.controller.get_table_and_list(
             self.current_start_date, self.selected_week
         )
         details_title = details.pop(0)
         shut_width, shut_height = shutil.get_terminal_size()
-        # log_msg(f"shut = {shut_width}, {shut_height}")
 
         visible_height = shut_height - 17
 
@@ -360,13 +330,14 @@ class FourWeekView:
         if offset > 0:
             if max_scroll > 0:
                 # scrolling down and there are more items to show
-                # scroll_down = min(adjusted_height, max_scroll)
-                self.scroll_offset += min(adjusted_height, max_scroll)
+                # self.scroll_offset += min(adjusted_height, max_scroll)
+                self.scroll_offset += 1
         if offset < 0:
             if self.scroll_offset > 0:
                 # scrolling up and there are more items to show
                 # scroll_up = min(adjusted_height, self.scroll_offset)
-                self.scroll_offset -= min(adjusted_height, self.scroll_offset)
+                # self.scroll_offset -= min(adjusted_height, self.scroll_offset)
+                self.scroll_offset -= 1
 
         show_above = self.scroll_offset > 0
         show_below = len(details) - adjusted_height - self.scroll_offset > 0
@@ -379,9 +350,9 @@ class FourWeekView:
         # prepare scroll_msg for the subtitle
         scroll_msgs = []
         if show_above:
-            scroll_msgs.append("up: <")
+            scroll_msgs.append("up")
         if show_below:
-            scroll_msgs.append("down: >")
+            scroll_msgs.append("down")
         scroll_msg = (
             "Scroll " + " or ".join(scroll_msgs) + " for more items"
             if scroll_msgs

@@ -56,6 +56,7 @@ ADAY = "━"  # U+2501 for all day events ━
 SELECTED_COLOR = "bold yellow"
 
 HEADER_COLOR = NAMED_COLORS["LemonChiffon"]
+HEADER_STYLE = f"bold {NAMED_COLORS['LemonChiffon']}"
 
 ONEDAY = timedelta(days=1)
 ONEWK = 7 * ONEDAY
@@ -369,10 +370,11 @@ class Controller:
             datetime.now() + ONEDAY
         ).isocalendar()
         title = format_date_range(start_date, end_date)
+        log_msg(f"{DAY_COLOR = }")
 
         table = Table(
             show_header=True,
-            header_style="bold blue",
+            header_style=HEADER_STYLE,
             show_lines=True,
             style=FRAME_COLOR,
             expand=True,
@@ -443,7 +445,10 @@ class Controller:
                         f"[{SELECTED_COLOR}]{cell}[/{SELECTED_COLOR}]" for cell in row
                     ]
             if SELECTED:
+                # table.add_row(*row)
                 table.add_row(*row, style=f"on {SELECTED_BACKGROUND}")
+                # table.add_row(Panel.fit(row))
+
             else:
                 table.add_row(*row)
             self.yrwk_to_details[yr_wk] = self.get_week_details((iso_year, iso_week))
