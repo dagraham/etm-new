@@ -304,6 +304,7 @@ class DynamicViewApp(App):
         ("P", "previous_match", ""),
         # No global esc binding here
     ]
+    search_term = reactive("")  # Store the current search term
 
     def __init__(self, controller) -> None:
         super().__init__()
@@ -328,32 +329,6 @@ class DynamicViewApp(App):
                 base26_tag = "".join(self.digit_buffer)
                 self.digit_buffer.clear()
                 self.display_tag(base26_tag)
-
-    # def display_tag(self, tag: str):
-    #     """Display details for the selected tag in the ScrollableList."""
-    #     # Retrieve the corresponding item's details using the tag
-    #     details = self.controller.process_tag(tag, self.selected_week)
-    #     if details:
-    #         # Replace the current list with the details
-    #         self.replace_list_with(details.splitlines())
-    #     else:
-    #         # Optionally, show a message if no item matches the tag
-    #         self.replace_list_with([f"No item found for tag: {tag}"])
-
-    # def compose(self) -> ComposeResult:
-    #     """Initial layout."""
-    #     table, details = self.controller.get_table_and_list(
-    #         self.current_start_date, self.selected_week
-    #     )
-    #     # Main container
-    #     self.main_container = Vertical(
-    #         Static(table, id="table"),
-    #         ScrollableList(details, id="list"),
-    #     )
-    #     yield self.main_container
-    #     # yield Header(icon="📅")
-    #     # yield Header(icon="etm")
-    #     yield Footer(show_command_palette=False)
 
     def compose(self) -> ComposeResult:
         """Initial layout."""
@@ -397,25 +372,47 @@ class DynamicViewApp(App):
         log_msg(f"Updating footer with: {footer_content}")
         self.query_one("#custom_footer", Static).update_content(footer_content)
 
+    # def action_start_search(self):
+    #     """Show the search input widget."""
+    #     # Refresh the main view
+    #     self.update_table_and_list()
+    #
+    #     # Create and mount the search input widget
+    #     search_input = Input(placeholder="Search...", id="search")
+    #     self.main_container.mount(search_input)
+    #     self.set_focus(search_input)
+    #
+    #     # Switch the footer to search mode
+    #     self.query_one("#custom_footer", CustomFooter).set_search_mode("")
+    #
+    # def on_input_submitted(self, event: Input.Submitted):
+    #     """Handle the submission of the search input."""
+    #     if event.input.id == "search":
+    #         search_term = event.value  # Get the submitted value
+    #         event.input.remove()  # Remove the input widget
+    #         self.perform_search(search_term)
+
     def action_start_search(self):
         """Show the search input widget."""
-        # Refresh the main view
         self.update_table_and_list()
-
-        # Create and mount the search input widget
         search_input = Input(placeholder="Search...", id="search")
         self.main_container.mount(search_input)
         self.set_focus(search_input)
 
-        # Switch the footer to search mode
-        self.query_one("#custom_footer", CustomFooter).set_search_mode("")
-
     def on_input_submitted(self, event: Input.Submitted):
         """Handle the submission of the search input."""
         if event.input.id == "search":
-            search_term = event.value  # Get the submitted value
+            self.search_term = event.value  # Store the search term globally
             event.input.remove()  # Remove the input widget
-            self.perform_search(search_term)
+            self.perform_search(self.search_term)
+
+    def action_clear_search(self):
+        """Clear the current search and reset the footer."""
+        self.search_term = ""  # Clear the global search term
+        scrollable_list = self.query_one("#list", ScrollableList)
+        scrollable_list.clear_search()
+        self.update_footer(search_active=False)
+        self.update_table_and_list()
 
     def action_next_match(self):
         """Scroll to the next match."""
@@ -444,18 +441,18 @@ class DynamicViewApp(App):
         self.update_footer(search_active=True, search_string=search_term)
         scrollable_list.refresh()
 
-    def action_clear_search(self):
-        """Clear the current search and reset the footer."""
-        # Clear the search in the ScrollableList
-        scrollable_list = self.query_one("#list", ScrollableList)
-        scrollable_list.clear_search()
-        self.update_footer(search_active=False, search_string="")
-
-        # Reset the footer to normal mode
-        self.query_one("#custom_footer", CustomFooter).set_normal_mode()
-
-        # Refresh the table and list
-        self.update_table_and_list()
+    # def action_clear_search(self):
+    #     """Clear the current search and reset the footer."""
+    #     # Clear the search in the ScrollableList
+    #     scrollable_list = self.query_one("#list", ScrollableList)
+    #     scrollable_list.clear_search()
+    #     self.update_footer(search_active=False, search_string="")
+    #
+    #     # Reset the footer to normal mode
+    #     self.query_one("#custom_footer", CustomFooter).set_normal_mode()
+    #
+    #     # Refresh the table and list
+    #     self.update_table_and_list()
 
     def action_show_help(self):
         """Show help content."""
@@ -476,177 +473,6 @@ class DynamicViewApp(App):
     def action_quit(self):
         """Exit the app."""
         self.exit()
-
-    # def replace_list_with(self, lines: list[str]):
-    #     """Replace the current ScrollableList with a new one."""
-    #     # Find the table widget
-    #     table_widget = self.query_one("#table", Static)
-    #
-    #     # Remove the current ScrollableList
-    #     current_list = self.query_one("#list", ScrollableList)
-    #     current_list.remove()
-    #
-    #     # Create a new ScrollableList with the provided lines
-    #     new_list = ScrollableList(lines, id="info")
-    #     self.main_container.mount(new_list, after=table_widget)
-    #
-    #     # Update the view mode
-    #     self.view_mode = "info"
-
-    # def replace_list_with(self, lines: list[str]):
-    #     """Replace the current ScrollableList with a new one, displaying the first line as a title."""
-    #     # Find the table widget
-    #     table_widget = self.query_one("#table", Static)
-    #
-    #     # Remove the current ScrollableList
-    #     current_list = self.query_one("#list", ScrollableList)
-    #     current_list.remove()
-    #
-    #     # Extract the title and remaining lines
-    #     title = lines.pop(0) if lines else "Untitled"
-    #
-    #     # Create a new title widget
-    #     title_widget = Static(title, id="list_title", classes="list-title")
-    #
-    #     # Create a new ScrollableList with the remaining lines
-    #     new_list = ScrollableList(lines, id="info")
-    #
-    #     # Mount the title widget and the ScrollableList
-    #     self.main_container.mount(title_widget, after=table_widget)
-    #     self.main_container.mount(new_list, after=title_widget)
-    #
-    #     # Update the view mode
-    #     self.view_mode = "info"
-
-    # def replace_list_with(self, lines: list[str]):
-    #     """Replace the current ScrollableList with a new one, including a title."""
-    #     # Find or reuse the title widget
-    #     log_msg("In replace_list_with")
-    #     try:
-    #         title_widget = self.query_one("#list_title", Static)
-    #     except LookupError:
-    #         # Create the title widget if it doesn't exist
-    #         log_msg("Creating title widget")
-    #         title_widget = Static(id="list_title", classes="list-title")
-    #         self.main_container.mount(title_widget)
-    #
-    #     # Update the content of the title widget
-    #     title = lines.pop(0) if lines else "Untitled"
-    #     title_widget.update(title)
-    #
-    #     log_msg("removing current list")
-    #     # Remove the current ScrollableList
-    #     try:
-    #         current_list = self.query_one("#list", ScrollableList)
-    #         current_list.remove()
-    #     except LookupError:
-    #         pass
-    #
-    #     # Create and mount the new ScrollableList
-    #     log_msg("Creating new list")
-    #     new_list = ScrollableList(lines, id="list")
-    #     self.main_container.mount(new_list, after=title_widget)
-    #
-    #     # Update the view mode
-    #     self.view_mode = "info"
-
-    # def replace_list_with(self, lines: list[str]):
-    #     """Replace the current ScrollableList with updated content, including a title."""
-    #     # Find or reuse the title widget
-    #     log_msg("In replace_list_with")
-    #     try:
-    #         title_widget = self.query_one("#list_title", Static)
-    #     except LookupError:
-    #         # Create the title widget if it doesn't exist
-    #         log_msg("Creating title widget")
-    #         title_widget = Static(id="list_title", classes="list-title")
-    #         self.main_container.mount(title_widget)
-    #
-    #     # Update the content of the title widget
-    #     title = lines.pop(0) if lines else "Untitled"
-    #     title_widget.update(title)
-    #
-    #     # Find or reuse the ScrollableList widget
-    #     try:
-    #         current_list = self.query_one("#list", ScrollableList)
-    #         log_msg("Reusing existing list")
-    #         current_list.lines = [
-    #             Text.from_markup(line) for line in lines
-    #         ]  # Update lines
-    #         current_list.virtual_size = Size(40, len(lines))  # Update virtual size
-    #         current_list.refresh()  # Refresh the content
-    #     except LookupError:
-    #         log_msg("Creating new list")
-    #         # If no ScrollableList exists, create and mount a new one
-    #         new_list = ScrollableList(lines, id="list")
-    #         self.main_container.mount(new_list, after=title_widget)
-    #
-    #     # Update the view mode
-    #     self.view_mode = "info"
-
-    # def replace_list_with(self, lines: list[str]):
-    #     """Replace the current ScrollableList with updated content, including a title."""
-    #     log_msg("In replace_list_with")
-    #
-    #     # Reuse or create the title widget
-    #     try:
-    #         title_widget = self.query_one("#list_title", Static)
-    #     except LookupError:
-    #         log_msg("Creating title widget")
-    #         title_widget = Static(id="list_title", classes="list-title")
-    #         self.main_container.mount(title_widget)
-    #
-    #     # Extract the title from a copy of the lines list
-    #     lines_copy = lines[
-    #         :
-    #     ]  # Create a copy of the list to avoid modifying the original
-    #     title = lines_copy.pop(0) if lines_copy else "Untitled"
-    #     title_widget.update(title)  # Update the title widget content
-    #
-    #     # Reuse or replace the ScrollableList
-    #     log_msg("Reusing or replacing list widget")
-    #     try:
-    #         list_widget = self.query_one("#list", ScrollableList)
-    #         log_msg("Reusing existing list widget")
-    #         list_widget.lines = [
-    #             Text.from_markup(line) for line in lines_copy
-    #         ]  # Update lines
-    #         list_widget.virtual_size = Size(40, len(lines_copy))  # Update virtual size
-    #         list_widget.refresh()  # Refresh the list
-    #     except LookupError:
-    #         log_msg("Creating new list widget")
-    #         list_widget = ScrollableList(lines_copy, id="list")
-    #         self.main_container.mount(list_widget, after=title_widget)
-    #
-    #     # Update the view mode
-    #     self.view_mode = "info"
-
-    # def replace_list_with(self, lines: list[str]):
-    #     """Replace the current ScrollableList with updated content, including a title."""
-    #     # Find or reuse the title widget
-    #     try:
-    #         title_widget = self.query_one("#list_title", Static)
-    #     except LookupError:
-    #         title_widget = Static(id="list_title", classes="list-title")
-    #         self.main_container.mount(title_widget)
-    #
-    #     # Extract the title from lines
-    #     title = lines[0] if lines else "Untitled"
-    #     title_widget.update(title)  # Update the title widget content
-    #
-    #     # Reuse or replace the ScrollableList
-    #     try:
-    #         list_widget = self.query_one("#list", ScrollableList)
-    #         list_widget.lines = [
-    #             Text.from_markup(line) for line in lines[1:]
-    #         ]  # Exclude title
-    #         list_widget.virtual_size = Size(40, len(lines) - 1)
-    #         list_widget.refresh()
-    #     except LookupError:
-    #         new_list = ScrollableList(lines, id="list")
-    #         self.main_container.mount(new_list, after=title_widget)
-    #
-    #     self.view_mode = "info"
 
     def replace_list_with(self, lines: list[str]):
         """Replace the current ScrollableList with updated content, including a title."""
@@ -675,158 +501,6 @@ class DynamicViewApp(App):
             )
 
         self.view_mode = "info"
-
-    # def restore_list(self):
-    #     """Restore the original ScrollableList."""
-    #     # Find the table widget
-    #     table_widget = self.query_one("#table", Static)
-    #
-    #     # Remove the temporary InfoScreen
-    #     try:
-    #         current_info = self.query_one("#info", ScrollableList)
-    #         current_info.remove()
-    #     except LookupError:
-    #         # If no widget with id="info" exists, do nothing
-    #         pass
-    #
-    #     # Recreate and mount the original ScrollableList
-    #     table, details = self.controller.get_table_and_list(
-    #         self.current_start_date, self.selected_week
-    #     )
-    #     original_list = ScrollableList(details, id="list")
-    #     self.main_container.mount(original_list, after=table_widget)
-    #
-    #     # Update view mode to 'list'
-    #     self.view_mode = "list"
-
-    # def restore_list(self):
-    #     """Restore the original ScrollableList."""
-    #     # Find the table widget
-    #     log_msg("in restore_list")
-    #     table_widget = self.query_one("#table", Static)
-    #
-    #     # Reuse the title widget if it exists
-    #     log_msg("in restore_list, looking for title widget")
-    #     try:
-    #         title_widget = self.query_one("#list_title", Static)
-    #     except LookupError:
-    #         # Create the title widget if it doesn't exist
-    #         log_msg("Creating title widget")
-    #         title_widget = Static(id="list_title", classes="list-title")
-    #         self.main_container.mount(title_widget, after=table_widget)
-    #     log_msg("title widget found")
-    #
-    #     # Update the content of the title widget
-    #     table, details = self.controller.get_table_and_list(
-    #         self.current_start_date, self.selected_week
-    #     )
-    #     log_msg("title widget update")
-    #     title = details.pop(0) if details else "Untitled"
-    #     title_widget.update(title)  # Update the title text
-    #
-    #     # Remove the temporary ScrollableList if it exists
-    #     log_msg("removing current_info")
-    #     try:
-    #         current_info = self.query_one("#info", ScrollableList)
-    #         current_info.remove()
-    #     except LookupError:
-    #         pass
-    #
-    #     # Recreate and mount the original ScrollableList
-    #     log_msg("Creating original_list")
-    #     original_list = ScrollableList(details, id="list")
-    #     self.main_container.mount(original_list, after=title_widget)
-    #
-    #     # Update view mode to 'list'
-    #     self.view_mode = "list"
-
-    # def restore_list(self):
-    #     """Restore the original ScrollableList."""
-    #     log_msg("in restore_list")
-    #
-    #     # Find the table widget
-    #     table_widget = self.query_one("#table", Static)
-    #
-    #     # Reuse the title widget if it exists
-    #     log_msg("in restore_list, looking for title widget")
-    #     try:
-    #         title_widget = self.query_one("#list_title", Static)
-    #     except LookupError:
-    #         # Create the title widget if it doesn't exist
-    #         log_msg("Creating title widget")
-    #         title_widget = Static(id="list_title", classes="list-title")
-    #         self.main_container.mount(title_widget, after=table_widget)
-    #     log_msg("title widget found")
-    #
-    #     # Update the content of the title widget
-    #     table, details = self.controller.get_table_and_list(
-    #         self.current_start_date, self.selected_week
-    #     )
-    #     log_msg("title widget update")
-    #     title = details.pop(0) if details else "Untitled"
-    #     title_widget.update(title)  # Update the title text
-    #
-    #     # Reuse or replace the ScrollableList widget
-    #     log_msg("reusing or replacing list widget")
-    #     try:
-    #         list_widget = self.query_one("#list", ScrollableList)
-    #         log_msg("Reusing existing list widget")
-    #         list_widget.lines = [
-    #             Text.from_markup(line) for line in details
-    #         ]  # Update lines
-    #         list_widget.virtual_size = Size(40, len(details))  # Update virtual size
-    #         list_widget.refresh()  # Refresh the list
-    #     except LookupError:
-    #         log_msg("Creating new list widget")
-    #         # Create a new ScrollableList if it doesn't exist
-    #         list_widget = ScrollableList(details, id="list")
-    #         self.main_container.mount(list_widget, after=title_widget)
-    #
-    #     # Update view mode
-    #     self.view_mode = "list"
-
-    # def restore_list(self):
-    #     """Restore the original ScrollableList."""
-    #     log_msg("in restore_list")
-    #
-    #     # Find the table widget
-    #     table_widget = self.query_one("#table", Static)
-    #
-    #     # Reuse or create the title widget
-    #     try:
-    #         title_widget = self.query_one("#list_title", Static)
-    #     except LookupError:
-    #         log_msg("Creating title widget")
-    #         title_widget = Static(id="list_title", classes="list-title")
-    #         self.main_container.mount(title_widget, after=table_widget)
-    #
-    #     # Get the table and details, extracting the title from a copy of details
-    #     table, details = self.controller.get_table_and_list(
-    #         self.current_start_date, self.selected_week
-    #     )
-    #     details_copy = details[:]  # Create a copy to avoid modifying the original
-    #     title = details_copy.pop(0) if details_copy else "Untitled"
-    #     title_widget.update(title)  # Update the title widget content
-    #
-    #     # Reuse or replace the ScrollableList
-    #     log_msg("Reusing or replacing list widget")
-    #     try:
-    #         list_widget = self.query_one("#list", ScrollableList)
-    #         log_msg("Reusing existing list widget")
-    #         list_widget.lines = [
-    #             Text.from_markup(line) for line in details_copy
-    #         ]  # Update lines
-    #         list_widget.virtual_size = Size(
-    #             40, len(details_copy)
-    #         )  # Update virtual size
-    #         list_widget.refresh()  # Refresh the list
-    #     except LookupError:
-    #         log_msg("Creating new list widget")
-    #         list_widget = ScrollableList(details_copy, id="list")
-    #         self.main_container.mount(list_widget, after=title_widget)
-    #
-    #     # Update the view mode
-    #     self.view_mode = "list"
 
     def restore_list(self):
         """Restore the original ScrollableList."""
@@ -882,40 +556,31 @@ class DynamicViewApp(App):
 
     # def update_table_and_list(self):
     #     """Update the table and scrollable list."""
-    #     table, details = self.controller.get_table_and_list(
-    #         self.current_start_date, self.selected_week
-    #     )
-    #     # Update the table
-    #     self.query_one("#table", Static).update(table)
-    #     # Update the scrollable list
-    #     scrollable_list = self.query_one("#list", ScrollableList)
-    #     scrollable_list.lines = [Text.from_markup(line) for line in details]
-    #     scrollable_list.virtual_size = Size(40, len(details))
-    #     scrollable_list.refresh()
-
-    # def update_table_and_list(self, exclude_title: bool = False):
-    #     """Update the table and scrollable list."""
+    #     # Fetch the table and details
     #     table, details = self.controller.get_table_and_list(
     #         self.current_start_date, self.selected_week
     #     )
     #
-    #     # Update the table
+    #     # Update the table widget
     #     self.query_one("#table", Static).update(table)
     #
-    #     # Extract the title if `exclude_title` is True
-    #     if exclude_title and details:
-    #         title = details.pop(0)
+    #     # Extract the title (always the first line) and update the title widget
+    #     if details:
+    #         title = details[
+    #             0
+    #         ]  # Use the first line as the title without modifying the list
     #         self.query_one("#list_title", Static).update(title)
     #
-    #     # Update the scrollable list
+    #     # Update the scrollable list with the remaining lines
     #     scrollable_list = self.query_one("#list", ScrollableList)
-    #     scrollable_list.lines = [Text.from_markup(line) for line in details]
-    #     scrollable_list.virtual_size = Size(40, len(details))
-    #     scrollable_list.refresh()
+    #     scrollable_list.lines = [
+    #         Text.from_markup(line) for line in details[1:]
+    #     ]  # Exclude title
+    #     scrollable_list.virtual_size = Size(40, len(details[1:]))  # Adjust virtual size
+    #     scrollable_list.refresh()  # Refresh the widget
 
     def update_table_and_list(self):
         """Update the table and scrollable list."""
-        # Fetch the table and details
         table, details = self.controller.get_table_and_list(
             self.current_start_date, self.selected_week
         )
@@ -925,9 +590,7 @@ class DynamicViewApp(App):
 
         # Extract the title (always the first line) and update the title widget
         if details:
-            title = details[
-                0
-            ]  # Use the first line as the title without modifying the list
+            title = details[0]  # Use the first line as the title
             self.query_one("#list_title", Static).update(title)
 
         # Update the scrollable list with the remaining lines
@@ -936,7 +599,11 @@ class DynamicViewApp(App):
             Text.from_markup(line) for line in details[1:]
         ]  # Exclude title
         scrollable_list.virtual_size = Size(40, len(details[1:]))  # Adjust virtual size
-        scrollable_list.refresh()  # Refresh the widget
+        scrollable_list.refresh()
+
+        # Reapply the search term if it's active
+        if self.search_term:
+            scrollable_list.set_search_term(self.search_term)
 
     def action_current_period(self):
         self.current_start_date = calculate_4_week_start()
