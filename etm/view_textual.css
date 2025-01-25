@@ -1,4 +1,6 @@
 Screen {
     background: #2e2e2e; /* Dark grey  near perfect */
 }
-
+#list_title {
+    text-align: center;
+}

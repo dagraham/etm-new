@@ -513,7 +513,8 @@ class Controller:
             details.append(
                 f" [{HEADER_COLOR}]Nothing scheduled for this week[/{HEADER_COLOR}]"
             )
-            return "\n".join(details)
+            # return "\n".join(details)
+            return details
 
         # use a, ..., z if len(events) <= 26 else use aa, ..., zz
         self.afill = 1 if len(events) <= 26 else 2
