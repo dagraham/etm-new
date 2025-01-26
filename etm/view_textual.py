@@ -143,28 +143,17 @@ def calculate_4_week_start():
 
 
 HelpText = f"""\
-[bold][{HEADER_COLOR}]ETM Key Bindings[/{HEADER_COLOR}][/bold]
-[bold][{HEADER_COLOR}]Application[/{HEADER_COLOR}][/bold]
-  [yellow][bold]escape[/bold]:      Return to the previous screen[/yellow]
-  [bold]Q[/bold]:           Quit etm
-  [bold]?[/bold]:           Show this help screen
-
-[bold][{HEADER_COLOR}]Search[/{HEADER_COLOR}][/bold]
-  [bold]/[/bold]:           Set search
-  [bold]N[/bold]:           Next match
-  [bold]P[/bold]:           Previous match
-  [bold]escape[/bold]:      Clear search
-
-[bold][{HEADER_COLOR}]Navigation[/{HEADER_COLOR}][/bold]
-  [bold]space[/bold]:       Scroll to the current 4-week period
-  [bold]left[/bold]:        Scroll to the previous week
-  [bold]right[/bold]:       Scroll to the next week
-  [bold]shift+left[/bold]:  Scroll to the previous 4-week period
-  [bold]shift+right[/bold]: Scroll to the next 4-week period
-  [bold]up[/bold]:          Scroll up in the list view 
-  [bold]down[/bold]:        Scroll down in the list view 
-  [bold]period[/bold]:      Show the selected week 2nd in 4-week period
-
+[bold][{HEADER_COLOR}]ETM {VERSION}[/{HEADER_COLOR}][/bold]
+[bold][{HEADER_COLOR}]Application Keys[/{HEADER_COLOR}][/bold]
+  [bold]escape[/bold]:      previous screen     [bold]Q[/bold]:         Quit etm
+[bold][{HEADER_COLOR}]Search Keys[/{HEADER_COLOR}][/bold]
+  [bold]/[/bold]:           Set search          [bold]N[/bold]:         Next match 
+  [bold]escape[/bold]:      Clear search        [bold]P[/bold]:         Previous match           
+[bold][{HEADER_COLOR}]Navigation Keys[/{HEADER_COLOR}][/bold]
+  [bold]left[/bold]:        previous week       [bold]up[/bold]:        up in the list view     
+  [bold]right[/bold]:       next week           [bold]down[/bold]:      down in the list view   
+  [bold]shift+left[/bold]:  previous 4-weeks    [bold]period[/bold]:    center week
+  [bold]shift+right[/bold]: next 4-weeks        [bold]space[/bold]:     current 4-weeks 
 """.splitlines()
 
 
@@ -363,34 +352,13 @@ class DynamicViewApp(App):
                 if len(search_string) > max_length
                 else search_string
             )
-            # footer_content = f'?: Help   Matching: "{truncated_string}"   N: Next match   P: Previous match   ESC: Clear search'
-            footer_content = f"[bold yellow]?[/bold yellow] Help [bold yellow]/[/bold yellow] [bold {MATCH_COLOR}]{truncated_string}[/bold {MATCH_COLOR}], [bold yellow]N[/bold yellow] next, [bold yellow]P[/bold yellow] prev, [bold yellow]esc[/bold yellow] clear"
+            footer_content = f"[bold yellow]?[/bold yellow] Help, [bold yellow]/[/bold yellow] [bold {MATCH_COLOR}]{truncated_string}[/bold {MATCH_COLOR}], [bold yellow]N[/bold yellow] next, [bold yellow]P[/bold yellow] prev, [bold yellow]esc[/bold yellow] clear"
         else:
             footer_content = (
-                "[bold yellow]?[/bold yellow] Help [bold yellow]/[/bold yellow] Search"
+                "[bold yellow]?[/bold yellow] Help, [bold yellow]/[/bold yellow] Search"
             )
         log_msg(f"Updating footer with: {footer_content}")
         self.query_one("#custom_footer", Static).update_content(footer_content)
-
-    # def action_start_search(self):
-    #     """Show the search input widget."""
-    #     # Refresh the main view
-    #     self.update_table_and_list()
-    #
-    #     # Create and mount the search input widget
-    #     search_input = Input(placeholder="Search...", id="search")
-    #     self.main_container.mount(search_input)
-    #     self.set_focus(search_input)
-    #
-    #     # Switch the footer to search mode
-    #     self.query_one("#custom_footer", CustomFooter).set_search_mode("")
-    #
-    # def on_input_submitted(self, event: Input.Submitted):
-    #     """Handle the submission of the search input."""
-    #     if event.input.id == "search":
-    #         search_term = event.value  # Get the submitted value
-    #         event.input.remove()  # Remove the input widget
-    #         self.perform_search(search_term)
 
     def action_start_search(self):
         """Show the search input widget."""
@@ -440,19 +408,6 @@ class DynamicViewApp(App):
         scrollable_list.set_search_term(search_term)
         self.update_footer(search_active=True, search_string=search_term)
         scrollable_list.refresh()
-
-    # def action_clear_search(self):
-    #     """Clear the current search and reset the footer."""
-    #     # Clear the search in the ScrollableList
-    #     scrollable_list = self.query_one("#list", ScrollableList)
-    #     scrollable_list.clear_search()
-    #     self.update_footer(search_active=False, search_string="")
-    #
-    #     # Reset the footer to normal mode
-    #     self.query_one("#custom_footer", CustomFooter).set_normal_mode()
-    #
-    #     # Refresh the table and list
-    #     self.update_table_and_list()
 
     def action_show_help(self):
         """Show help content."""

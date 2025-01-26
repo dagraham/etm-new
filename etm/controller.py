@@ -25,7 +25,7 @@ import string
 import shutil
 from .model import DatabaseManager
 
-from .common import log_msg, display_messages
+from .common import log_msg, display_messages, truncate_string
 
 DAY_COLOR = NAMED_COLORS["LemonChiffon"]
 FRAME_COLOR = NAMED_COLORS["Khaki"]
@@ -585,4 +585,162 @@ class Controller:
         # NOTE: maybe return list for scrollable view?
         # details_str = "\n".join(details)
         self.yrwk_to_details[yr_wk] = details
+        return details
+
+    def get_next(self):
+        """
+        Fetch and format details for the next instances.
+        """
+        events = self.db_manager.get_next_instances()
+        header = f"Next instances ({len(events)})"
+        details = [f"[not bold][{HEADER_COLOR}]{header}[/{HEADER_COLOR}][/not bold]"]
+
+        if not events:
+            details.append(f" [{HEADER_COLOR}]Nothing found[/{HEADER_COLOR}]")
+            # return "\n".join(details)
+            return details
+
+        # use a, ..., z if len(events) <= 26 else use aa, ..., zz
+        self.afill = 1 if len(events) <= 26 else 2 if len(events) <= 676 else 3
+
+        self.tag_to_id.setdefault("next", {})
+        yr_mnth_to_events = {}
+
+        # for start_ts, end_ts, type, name, id in events:
+        for id, name, description, type, start_ts in events:
+            start_dt = datetime.fromtimestamp(start_ts)
+            # log_msg(f"Week details {name = }, {start_dt = }, {end_dt = }")
+            monthday = start_dt.strftime("%d")
+            start_end = f"{start_dt.strftime('%-d %H:%M'):>8}"
+            type_color = TYPE_TO_COLOR[type]
+            escaped_start_end = f"[not bold]{start_end}[/not bold]"
+            row = [
+                id,
+                f"[{type_color}]{type} {escaped_start_end:<12}  {name}[/{type_color}]",
+            ]
+            yr_mnth_to_events.setdefault(start_dt.strftime("%y-%m"), []).append(row)
+
+        indx = 0
+
+        tag = indx_to_tag(indx, self.afill)
+
+        for ym, events in yr_mnth_to_events.items():
+            if events:
+                details.append(
+                    # f" [bold][yellow]{day.strftime('%A, %B %-d')}[/yellow][/bold]"
+                    f"[not bold][{HEADER_COLOR}]{ym}[/{HEADER_COLOR}][/not bold]"
+                )
+                for event in events:
+                    event_id, event_str = event
+                    # log_msg(f"{event_str = }")
+                    tag = indx_to_tag(indx, self.afill)
+                    self.tag_to_id[tag] = event_id
+                    details.append(f"  [dim]{tag}[/dim]  {event_str}")
+                    indx += 1
+        # NOTE: maybe return list for scrollable view?
+        # details_str = "\n".join(details)
+        return details
+
+    def get_last(self):
+        """
+        Fetch and format details for the next instances.
+        """
+        events = self.db_manager.get_last_instances()
+        header = f"Last instances ({len(events)})"
+        details = [f"[not bold][{HEADER_COLOR}]{header}[/{HEADER_COLOR}][/not bold]"]
+
+        if not events:
+            details.append(f" [{HEADER_COLOR}]Nothing found[/{HEADER_COLOR}]")
+            # return "\n".join(details)
+            return details
+
+        # use a, ..., z if len(events) <= 26 else use aa, ..., zz
+        self.afill = 1 if len(events) <= 26 else 2 if len(events) <= 676 else 3
+
+        self.tag_to_id.setdefault("last", {})
+        yr_mnth_to_events = {}
+
+        # for start_ts, end_ts, type, name, id in events:
+        for id, name, description, type, start_ts in events:
+            start_dt = datetime.fromtimestamp(start_ts)
+            # log_msg(f"Week details {name = }, {start_dt = }, {end_dt = }")
+            monthday = start_dt.strftime("%d")
+            start_end = f"{start_dt.strftime('%-d %H:%M'):>8}"
+            type_color = TYPE_TO_COLOR[type]
+            escaped_start_end = f"[not bold]{start_end}[/not bold]"
+            row = [
+                id,
+                f"[{type_color}]{type} {escaped_start_end:<12}  {name}[/{type_color}]",
+            ]
+            yr_mnth_to_events.setdefault(start_dt.strftime("%y-%m"), []).append(row)
+
+        indx = 0
+
+        tag = indx_to_tag(indx, self.afill)
+
+        for ym, events in yr_mnth_to_events.items():
+            if events:
+                details.append(
+                    # f" [bold][yellow]{day.strftime('%A, %B %-d')}[/yellow][/bold]"
+                    f"[not bold][{HEADER_COLOR}]{ym}[/{HEADER_COLOR}][/not bold]"
+                )
+                for event in events:
+                    event_id, event_str = event
+                    # log_msg(f"{event_str = }")
+                    tag = indx_to_tag(indx, self.afill)
+                    self.tag_to_id[tag] = event_id
+                    details.append(f"  [dim]{tag}[/dim]  {event_str}")
+                    indx += 1
+        # NOTE: maybe return list for scrollable view?
+        # details_str = "\n".join(details)
+        return details
+
+    def find_records(self, search_str: str):
+        """
+        Fetch and format details for the next instances.
+        """
+        events = self.db_manager.find_records(search_str)
+        header = f"Records matching '{search_str}' ({len(events)})"
+        details = [f"[not bold][{HEADER_COLOR}]{header}[/{HEADER_COLOR}][/not bold]"]
+
+        if not events:
+            details.append(f" [{HEADER_COLOR}]Nothing found[/{HEADER_COLOR}]")
+            # return "\n".join(details)
+            return details
+
+        # use a, ..., z if len(events) <= 26 else use aa, ..., zz
+        self.afill = 1 if len(events) <= 26 else 2 if len(events) <= 676 else 3
+
+        self.tag_to_id.setdefault("last", {})
+
+        indx = 0
+
+        tag = indx_to_tag(indx, self.afill)
+        # for start_ts, end_ts, type, name, id in events:
+        for id, name, _, type, last_ts, next_ts in events:
+            name = f"{truncate_string(name, 30):<30}"
+            last_dt = (
+                datetime.fromtimestamp(last_ts).strftime("%y-%m-%d %H:%M")
+                if last_ts
+                else "~"
+            )
+            last_fmt = f"{last_dt:^14}"
+            next_dt = (
+                datetime.fromtimestamp(next_ts).strftime("%y-%m-%d %H:%M")
+                if next_ts
+                else "~"
+            )
+            next_fmt = f"{next_dt:^14}"
+            # yy-mm-dd hh:mm
+            # log_msg(f"Week details {name = }, {start_dt = }, {end_dt = }")
+            type_color = TYPE_TO_COLOR[type]
+            escaped_last = f"[not bold]{last_fmt}[/not bold]"
+            escaped_next = f"[not bold]{next_fmt}[/not bold]"
+            row = f"[{type_color}]{type} {name} {escaped_last} {escaped_next}[/{type_color}]"
+            tag = indx_to_tag(indx, self.afill)
+            self.tag_to_id[tag] = id
+            details.append(f"  [dim]{tag}[/dim]  {row}")
+            indx += 1
+        # NOTE: maybe return list for scrollable view?
+        # details_str = "\n".join(details)
         return details
