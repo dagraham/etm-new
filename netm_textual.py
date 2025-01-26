@@ -30,7 +30,7 @@ def main():
     controller = Controller("example.db")
     view = DynamicViewApp(controller)
     view.run()
-    test()
+    # test()
 
 
 if __name__ == "__main__":
