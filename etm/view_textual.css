@@ -1,6 +1,9 @@
 Screen {
     background: #2e2e2e; /* Dark grey  near perfect */
 }
+#table_title {
+    text-align: center;
+}
 #list_title {
     text-align: center;
 }

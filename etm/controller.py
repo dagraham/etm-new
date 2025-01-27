@@ -179,7 +179,7 @@ def indx_to_tag(indx: int, fill: int = 1):
     """
     Convert an index to a base-26 tag.
     """
-    return decimal_to_base26(indx).ljust(fill, "a")
+    return decimal_to_base26(indx).rjust(fill, "a")
 
 
 def base26_to_decimal(base26_num):
@@ -305,11 +305,12 @@ class Controller:
         self.tag_to_id = {}  # Maps tag numbers to event IDs
         self.yrwk_to_details = {}  # Maps (iso_year, iso_week), to the details for that week
         self.rownum_to_yrwk = {}  # Maps row numbers to (iso_year, iso_week) for the current period
-        # self.start_date = calculate_4_week_start()
-        # self.selected_week = tuple(
-        #     datetime.now().isocalendar()[:2]
-        # )  # Currently selected week
+        self.start_date = calculate_4_week_start()
+        self.selected_week = tuple(
+            datetime.now().isocalendar()[:2]
+        )  # Currently selected week
         self.tag_to_id = {}  # Maps tag numbers to event IDs
+        self.list_tag_to_id = {}  # Maps tag numbers to event IDs
 
     def get_record_details_as_string(self, record_id):
         """
@@ -344,25 +345,34 @@ class Controller:
         # log_msg(f"Content: {content}")
         return content
 
-    def process_tag(self, tag, selected_week):
+    def process_tag(self, tag, view: str):
         """
         Process the base26 tag entered by the user.
 
         Args:
             tag (str): The tag corresponding to a record.
         """
-        if tag in self.tag_to_id[selected_week]:
-            record_id = self.tag_to_id[selected_week][tag]
+        log_msg(f"Processing tag '{tag}' in view '{view}'")
+        if view == "week":
+            tag_to_id = self.tag_to_id[self.selected_week]
+        elif view in ["next", "last", "find"]:
+            tag_to_id = self.list_tag_to_id[view]
+        else:
+            return "Invalid view."
+
+        if tag in tag_to_id:
+            record_id = tag_to_id[tag]
             # log_msg(f"Tag '{tag}' corresponds to record ID {record_id}")
             details = self.get_record_details_as_string(record_id)
             return details
 
-        return f"[red]Invalid tag: '{tag}'[/red]"
+        return f"There is no item corresponding to tag '{tag}'."
 
     def generate_table(self, start_date, selected_week, grouped_events):
         """
         Generate a Rich table displaying events for the specified 4-week period.
         """
+        self.selected_week = selected_week
         end_date = start_date + timedelta(weeks=4) - ONEDAY  # End on a Sunday
         start_date = start_date
         today_year, today_week, today_weekday = datetime.now().isocalendar()
@@ -370,7 +380,6 @@ class Controller:
             datetime.now() + ONEDAY
         ).isocalendar()
         title = format_date_range(start_date, end_date)
-        log_msg(f"{DAY_COLOR = }")
 
         table = Table(
             show_header=True,
@@ -379,8 +388,8 @@ class Controller:
             style=FRAME_COLOR,
             expand=True,
             box=box.SQUARE,
-            title=title,
-            title_style="bold",
+            # title=title,
+            # title_style="bold",
         )
 
         weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
@@ -454,7 +463,7 @@ class Controller:
             self.yrwk_to_details[yr_wk] = self.get_week_details((iso_year, iso_week))
             current_date += timedelta(weeks=1)
 
-        return table
+        return title, table
 
     def get_table_and_list(self, start_date: datetime, selected_week: Tuple[int, int]):
         """
@@ -481,13 +490,13 @@ class Controller:
 
         terminal_width = shutil.get_terminal_size().columns
         # Generate the table
-        table = self.generate_table(start_date, selected_week, grouped_events)
+        title, table = self.generate_table(start_date, selected_week, grouped_events)
 
         if selected_week in self.yrwk_to_details:
             details = self.yrwk_to_details[selected_week]
         else:
             details = "No week selected."
-        return table, details
+        return title, table, details
 
     def get_week_details(self, yr_wk):
         """
@@ -499,6 +508,7 @@ class Controller:
             datetime.now() + ONEDAY
         ).isocalendar()
 
+        self.selected_week = yr_wk
         start_datetime = datetime.strptime(f"{yr_wk[0]} {yr_wk[1]} 1", "%G %V %u")
         end_datetime = start_datetime + timedelta(weeks=1)
         events = self.db_manager.get_events_for_period(start_datetime, end_datetime)
@@ -517,7 +527,7 @@ class Controller:
             return details
 
         # use a, ..., z if len(events) <= 26 else use aa, ..., zz
-        self.afill = 1 if len(events) <= 26 else 2
+        self.afill = 1 if len(events) <= 26 else 2 if len(events) <= 676 else 3
 
         self.tag_to_id.setdefault(yr_wk, {})
         weekday_to_events = {}
@@ -603,7 +613,7 @@ class Controller:
         # use a, ..., z if len(events) <= 26 else use aa, ..., zz
         self.afill = 1 if len(events) <= 26 else 2 if len(events) <= 676 else 3
 
-        self.tag_to_id.setdefault("next", {})
+        self.list_tag_to_id.setdefault("next", {})
         yr_mnth_to_events = {}
 
         # for start_ts, end_ts, type, name, id in events:
@@ -634,7 +644,7 @@ class Controller:
                     event_id, event_str = event
                     # log_msg(f"{event_str = }")
                     tag = indx_to_tag(indx, self.afill)
-                    self.tag_to_id[tag] = event_id
+                    self.list_tag_to_id["next"][tag] = event_id
                     details.append(f"  [dim]{tag}[/dim]  {event_str}")
                     indx += 1
         # NOTE: maybe return list for scrollable view?
@@ -657,7 +667,7 @@ class Controller:
         # use a, ..., z if len(events) <= 26 else use aa, ..., zz
         self.afill = 1 if len(events) <= 26 else 2 if len(events) <= 676 else 3
 
-        self.tag_to_id.setdefault("last", {})
+        self.list_tag_to_id.setdefault("last", {})
         yr_mnth_to_events = {}
 
         # for start_ts, end_ts, type, name, id in events:
@@ -688,7 +698,7 @@ class Controller:
                     event_id, event_str = event
                     # log_msg(f"{event_str = }")
                     tag = indx_to_tag(indx, self.afill)
-                    self.tag_to_id[tag] = event_id
+                    self.list_tag_to_id["last"][tag] = event_id
                     details.append(f"  [dim]{tag}[/dim]  {event_str}")
                     indx += 1
         # NOTE: maybe return list for scrollable view?
@@ -711,7 +721,7 @@ class Controller:
         # use a, ..., z if len(events) <= 26 else use aa, ..., zz
         self.afill = 1 if len(events) <= 26 else 2 if len(events) <= 676 else 3
 
-        self.tag_to_id.setdefault("last", {})
+        self.list_tag_to_id.setdefault("find", {})
 
         indx = 0
 
@@ -738,9 +748,13 @@ class Controller:
             escaped_next = f"[not bold]{next_fmt}[/not bold]"
             row = f"[{type_color}]{type} {name} {escaped_last} {escaped_next}[/{type_color}]"
             tag = indx_to_tag(indx, self.afill)
-            self.tag_to_id[tag] = id
+            self.list_tag_to_id["find"][tag] = id
             details.append(f"  [dim]{tag}[/dim]  {row}")
             indx += 1
         # NOTE: maybe return list for scrollable view?
         # details_str = "\n".join(details)
         return details
+
+
+for i in range(0, 100, 10):
+    log_msg(f"{i}: {indx_to_tag(i, 2)}")

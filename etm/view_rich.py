@@ -311,8 +311,8 @@ class FourWeekView:
         Display the table for the current period and the list of items for the current selected week,
         with scroll indicators if there are hidden rows.
         """
-
-        table, details = self.controller.get_table_and_list(
+        # FIXME: title is not used
+        title, table, details = self.controller.get_table_and_list(
             self.current_start_date, self.selected_week
         )
         details_title = details.pop(0)
