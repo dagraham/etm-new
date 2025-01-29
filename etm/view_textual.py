@@ -585,16 +585,16 @@ class DynamicViewApp(App):
 
         self.query_one("#custom_footer", Static).update_content(footer_content)
 
-    def action_start_search(self):
-        """Show the search input widget."""
-        self.search_term = ""  # Clear the previous search term
-        search_input = Input(placeholder="Search...", id="search")
-        self.query_one("#custom_footer", Static).update(
-            "[bold yellow]?[/bold yellow] Help [bold yellow]/[/bold yellow] Search Mode"
-        )
-        # self.push_screen(search_input)
-        self.mount(search_input)  # Mount the search input widget to the app
-        self.set_focus(search_input)
+    # def action_start_search(self):
+    #     """Show the search input widget."""
+    #     self.search_term = ""  # Clear the previous search term
+    #     search_input = Input(placeholder="Search...", id="search")
+    #     self.query_one("#custom_footer", Static).update(
+    #         "[bold yellow]?[/bold yellow] Help [bold yellow]/[/bold yellow] Search Mode"
+    #     )
+    #     # self.push_screen(search_input)
+    #     self.mount(search_input)  # Mount the search input widget to the app
+    #     self.set_focus(search_input)
 
     def action_start_search(self):
         """Show the search input widget for inline search."""
@@ -631,25 +631,25 @@ class DynamicViewApp(App):
         except LookupError:
             log_msg("Footer not found to update.")
 
-    def action_next_match(self):
-        """Scroll to the next match."""
-        scrollable_list = self.query_one("#list", ScrollableList)
-        current_y = scrollable_list.scroll_offset.y
-        next_match = next((i for i in scrollable_list.matches if i > current_y), None)
-        if next_match is not None:
-            scrollable_list.scroll_to(0, next_match)  # Use scroll_to for scrolling
-            scrollable_list.refresh()
-
-    def action_previous_match(self):
-        """Scroll to the previous match."""
-        scrollable_list = self.query_one("#list", ScrollableList)
-        current_y = scrollable_list.scroll_offset.y
-        previous_match = next(
-            (i for i in reversed(scrollable_list.matches) if i < current_y), None
-        )
-        if previous_match is not None:
-            scrollable_list.scroll_to(0, previous_match)  # Use scroll_to for scrolling
-            scrollable_list.refresh()
+    # def action_next_match(self):
+    #     """Scroll to the next match."""
+    #     scrollable_list = self.query_one("#list", ScrollableList)
+    #     current_y = scrollable_list.scroll_offset.y
+    #     next_match = next((i for i in scrollable_list.matches if i > current_y), None)
+    #     if next_match is not None:
+    #         scrollable_list.scroll_to(0, next_match)  # Use scroll_to for scrolling
+    #         scrollable_list.refresh()
+    #
+    # def action_previous_match(self):
+    #     """Scroll to the previous match."""
+    #     scrollable_list = self.query_one("#list", ScrollableList)
+    #     current_y = scrollable_list.scroll_offset.y
+    #     previous_match = next(
+    #         (i for i in reversed(scrollable_list.matches) if i < current_y), None
+    #     )
+    #     if previous_match is not None:
+    #         scrollable_list.scroll_to(0, previous_match)  # Use scroll_to for scrolling
+    #         scrollable_list.refresh()
 
     def action_next_match(self):
         """Scroll to the next match."""
@@ -701,7 +701,8 @@ class DynamicViewApp(App):
 
     def action_show_details(self, tag: str):
         """Show a temporary details screen for the selected item."""
-        details = self.controller.process_tag(tag, self.view)
+        log_msg(f"{tag = }, {self.view = }, {self.selected_week = }")
+        details = self.controller.process_tag(tag, self.view, self.selected_week)
         self.push_screen(DetailsScreen(details))
 
     def action_quit(self):
@@ -710,11 +711,11 @@ class DynamicViewApp(App):
 
     def update_table_and_list(self):
         """Update the table and scrollable list."""
+        log_msg(f"{self.selected_week = }, {self.current_start_date = }")
         title, table, details = self.controller.get_table_and_list(
             self.current_start_date, self.selected_week
         )
 
-        log_msg(f"{title = }")
         # Update the table widget
         self.query_one("#table_title", Static).update(title)
         self.query_one("#table", Static).update(table)

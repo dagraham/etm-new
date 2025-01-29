@@ -23,9 +23,12 @@ from prompt_toolkit.keys import Keys
 from prompt_toolkit.shortcuts import PromptSession
 import string
 import shutil
+from typing import Literal
+
 from .model import DatabaseManager
 
-from .common import log_msg, display_messages, truncate_string, wrap
+from .common import log_msg, display_messages, truncate_string, wrap, format_extent
+
 
 DAY_COLOR = NAMED_COLORS["LemonChiffon"]
 FRAME_COLOR = NAMED_COLORS["Grey"]
@@ -75,6 +78,22 @@ TYPE_TO_COLOR = {
     ">": BEGIN_COLOR,  # begin
     "!": INBOX_COLOR,  # inbox
 }
+
+# FIXME: This should be in a config file
+HRS_MINS = "12"  # 12 or 24 - make this the default
+
+
+def format_hours_mins(dt: datetime, mode: Literal["24", "12"]) -> str:
+    """
+    Format a datetime object as hours and minutes.
+    """
+    fmt = {
+        "24": "%H:%M",
+        "12": "%I:%M%p",
+    }
+    if mode == "12":
+        return dt.strftime(fmt[mode]).lower().rstrip("m")
+    return f"{dt.strftime(fmt[mode])}"
 
 
 def format_date_range(start_dt: datetime, end_dt: datetime):
@@ -385,16 +404,16 @@ class Controller:
         # log_msg(f"Content: {content}")
         return content
 
-    def process_tag(self, tag, view: str):
+    def process_tag(self, tag, view: str, selected_week: Tuple[int, int]):
         """
         Process the base26 tag entered by the user.
 
         Args:
             tag (str): The tag corresponding to a record.
         """
-        log_msg(f"Processing tag '{tag}' in view '{view}'")
         if view == "week":
-            tag_to_id = self.tag_to_id[self.selected_week]
+            log_msg(f"{self.selected_week = }")
+            tag_to_id = self.tag_to_id[selected_week]
         elif view in ["next", "last", "find"]:
             tag_to_id = self.list_tag_to_id[view]
         else:
@@ -416,7 +435,8 @@ class Controller:
         """
         Generate a Rich table displaying events for the specified 4-week period.
         """
-        self.selected_week = selected_week
+        # self.selected_week = selected_week
+        selected_week = self.selected_week
         end_date = start_date + timedelta(weeks=4) - ONEDAY  # End on a Sunday
         start_date = start_date
         today_year, today_week, today_weekday = datetime.now().isocalendar()
@@ -450,9 +470,10 @@ class Controller:
             iso_year, iso_week = yr_wk
             if yr_wk not in weeks:
                 weeks.append(yr_wk)
-            row_num += 1
+            # row_num += 1
+            row_num = f"{yr_wk[1]:>2}"
             self.rownum_to_yrwk[row_num] = yr_wk
-            row = [f"[{DIM_COLOR}]{row_num}[{DIM_COLOR}]\n"]
+            # row = [f"[{DIM_COLOR}]{row_num}[{DIM_COLOR}]\n"]
             SELECTED = yr_wk == selected_week
             row = (
                 [f"[{SELECTED_COLOR}]{row_num}[/{SELECTED_COLOR}]\n"]
@@ -524,6 +545,8 @@ class Controller:
         # tomorrow_year, tomorrow_week, tomorrow_day = (
         #     datetime.now() + ONEDAY
         # ).isocalendar()
+        log_msg(f"Getting table for {start_date = }, {selected_week = }")
+        self.selected_week = selected_week
         current_start_year, current_start_week, _ = start_date.isocalendar()
         self.db_manager.extend_datetimes_for_weeks(
             current_start_year, current_start_week, 4
@@ -535,7 +558,7 @@ class Controller:
         # terminal_width = shutil.get_terminal_size().columns
         # Generate the table
         title, table = self.generate_table(start_date, selected_week, grouped_events)
-        log_msg(f"Generated table for {title}")
+        log_msg(f"Generated table for {title}, {selected_week = }")
 
         if selected_week in self.yrwk_to_details:
             details = self.yrwk_to_details[selected_week]
@@ -547,7 +570,7 @@ class Controller:
         """
         Fetch and format details for a specific week.
         """
-        # log_msg(f"Getting details for week {yr_wk}")
+        log_msg(f"Getting details for week {yr_wk}")
         today_year, today_week, today_weekday = datetime.now().isocalendar()
         tomorrow_year, tomorrow_week, tomorrow_day = (
             datetime.now() + ONEDAY
@@ -596,9 +619,9 @@ class Controller:
                 ):
                     start_end = f"{str('~'):^11}"
                 else:
-                    start_end = f"{start_dt.strftime('%H:%M'):^11}"
+                    start_end = f"{format_extent(start_dt, end_dt, HRS_MINS):^11}"
             else:
-                start_end = f"{start_dt.strftime('%H:%M')}-{end_dt.strftime('%H:%M')}"
+                start_end = f"{format_extent(start_dt, end_dt, HRS_MINS):^11}"
 
             type_color = TYPE_TO_COLOR[type]
             escaped_start_end = f"[not bold]{start_end}[/not bold]"
@@ -803,7 +826,3 @@ class Controller:
         # NOTE: maybe return list for scrollable view?
         # details_str = "\n".join(details)
         return details
-
-
-for i in range(0, 100, 10):
-    log_msg(f"{i}: {indx_to_tag(i, 2)}")

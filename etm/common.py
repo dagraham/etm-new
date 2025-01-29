@@ -29,6 +29,7 @@ import functools
 from time import perf_counter
 from typing import Callable, Any
 import inspect
+from typing import Literal
 
 # import logging
 # import logging.config
@@ -132,6 +133,79 @@ def timeit(message: str = "") -> Callable[[Callable[..., Any]], Callable[..., An
         return wrapper
 
     return decorator
+
+
+def drop_zero_minutes(dt, mode: Literal["24", "12"]):
+    """
+    >>> drop_zero_minutes(parse('2018-03-07 10am'))
+    '10'
+    >>> drop_zero_minutes(parse('2018-03-07 2:45pm'))
+    '2:45'
+    """
+    show_minutes = True if mode == "24" else False
+    # logger.debug(f"starting {dt = }; {ampm = }; {show_minutes = }")
+    # logger.debug(f"{dt.replace(tzinfo=None) = }")
+    dt = dt.replace(tzinfo=None)
+    # logger.debug(f"{dt = }")
+    if show_minutes:
+        if mode == "12":
+            return dt.strftime("%-I:%M").rstrip("M").lower()
+        else:
+            return dt.strftime("%H:%M")
+    else:
+        if dt.minute == 0:
+            if mode == "12":
+                return dt.strftime("%-I")
+            else:
+                return dt.strftime("%H")
+        else:
+            if mode == "12":
+                return dt.strftime("%-I:%M").rstrip("M").lower()
+            else:
+                return dt.strftime("%H:%M")
+
+
+def format_extent(
+    beg_dt: datetime, end_dt: datetime, mode: str = Literal["24", 12]
+) -> str:
+    """
+    Format the beginning to ending times to display for a reminder with an extent (both @s and @e).
+    >>> beg_dt = parse('2018-03-07 10am')
+    >>> end_dt = parse('2018-03-07 11:30am')
+    >>> fmt_extent(beg_dt, end_dt)
+    '10-11:30am'
+    >>> end_dt = parse('2018-03-07 2pm')
+    >>> fmt_extent(beg_dt, end_dt)
+    '10am-2pm'
+    """
+    beg_suffix = ""
+    end_suffix = end_dt.strftime("%p").lower().rstrip("m") if mode == "12" else ""
+    if beg_dt == end_dt:
+        if beg_dt.hour == 0 and beg_dt.minute == 0 and beg_dt.second == 0:
+            return "~"
+        elif beg_dt.hour == 23 and beg_dt.minute == 59 and beg_dt.second == 59:
+            return "~"
+        else:
+            return f"{drop_zero_minutes(end_dt, mode)}{end_suffix}"
+
+    if end_dt.hour == 23 and end_dt.minute == 59 and end_dt.second == 59:
+        # end_dt = end_dt.replace(hour=0, minute=0, second=0)
+        end_dt = end_dt + timedelta(seconds=1)
+        end_suffix = "a" if mode == "12" else ""
+
+    if mode == "12":
+        diff = (beg_dt.hour < 12 and end_dt.hour >= 12) or (
+            beg_dt.hour >= 12 and end_dt.hour < 12
+        )
+        beg_suffix = beg_dt.strftime("%p").lower().rstrip("m") if diff else ""
+
+    beg_fmt = drop_zero_minutes(beg_dt, mode)
+    end_fmt = drop_zero_minutes(end_dt, mode)
+    if mode == "12":
+        beg_fmt = beg_fmt.lstrip("0")
+        end_fmt = end_fmt.lstrip("0")
+
+    return f"{beg_fmt}{beg_suffix}-{end_fmt}{end_suffix}"
 
 
 class TimeIt(object):
