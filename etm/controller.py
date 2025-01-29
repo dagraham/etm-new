@@ -25,10 +25,10 @@ import string
 import shutil
 from .model import DatabaseManager
 
-from .common import log_msg, display_messages, truncate_string
+from .common import log_msg, display_messages, truncate_string, wrap
 
 DAY_COLOR = NAMED_COLORS["LemonChiffon"]
-FRAME_COLOR = NAMED_COLORS["Khaki"]
+FRAME_COLOR = NAMED_COLORS["Grey"]
 DIM_COLOR = NAMED_COLORS["DarkGray"]
 EVENT_COLOR = NAMED_COLORS["LimeGreen"]
 AVAILABLE_COLOR = NAMED_COLORS["LightSkyBlue"]
@@ -41,11 +41,12 @@ BEGIN_COLOR = NAMED_COLORS["Gold"]
 INBOX_COLOR = NAMED_COLORS["OrangeRed"]
 TODAY_COLOR = NAMED_COLORS["Tomato"]
 # SELECTED_BACKGROUND = "#4d4d4d"
-SELECTED_BACKGROUND = "#5d5d5d"
+# SELECTED_BACKGROUND = "#5d5d5d"
+SELECTED_BACKGROUND = "#737373"
 
 BUSY_COLOR = NAMED_COLORS["YellowGreen"]
 CONF_COLOR = NAMED_COLORS["Tomato"]
-FRAME_COLOR = NAMED_COLORS["DimGrey"]
+BUSY_FRAME_COLOR = NAMED_COLORS["DimGrey"]
 SLOT_HOURS = [0, 4, 8, 12, 16, 20, 24]
 SLOT_MINUTES = [x * 60 for x in SLOT_HOURS]
 BUSY = "■"  # U+25A0 this will be busy_bar busy and conflict character
@@ -57,6 +58,7 @@ SELECTED_COLOR = "bold yellow"
 
 HEADER_COLOR = NAMED_COLORS["LemonChiffon"]
 HEADER_STYLE = f"bold {NAMED_COLORS['LemonChiffon']}"
+FIELD_COLOR = NAMED_COLORS["SkyBlue"]
 
 ONEDAY = timedelta(days=1)
 ONEWK = 7 * ONEDAY
@@ -290,7 +292,9 @@ def get_busy_bar(events):
 
     # return slots_state, "".join(busy_bar)
     busy_str = (
-        f"\n[{FRAME_COLOR}]{''.join(busy_bar)}[/{FRAME_COLOR}]" if have_busy else "\n"
+        f"\n[{BUSY_FRAME_COLOR}]{''.join(busy_bar)}[/{BUSY_FRAME_COLOR}]"
+        if have_busy
+        else "\n"
     )
 
     aday_str = f"[{BUSY_COLOR}]{ADAY}[/{BUSY_COLOR}]" if allday > 0 else ""
@@ -345,6 +349,42 @@ class Controller:
         # log_msg(f"Content: {content}")
         return content
 
+    def get_record_details(self, record_id):
+        """
+        Retrieve and format the details of a record as a list.
+
+        Args:
+            record_id (int): The ID of the record to retrieve.
+
+        Returns:
+            str: A formatted string with the record's details.
+        """
+        # log_msg(f"Fetching details for record ID {record_id}")
+        self.db_manager.cursor.execute(
+            """
+            SELECT id, type, name, details, rrulestr, extent
+            FROM Records
+            WHERE id = ?
+            """,
+            (record_id,),
+        )
+        record = self.db_manager.cursor.fetchone()
+        # log_msg(f"Record: {record = }")
+
+        if not record:
+            return [
+                f"[red]No record found for ID {record_id}[/red]",
+            ]
+
+        fields = ["Id", "Type", "Name", "Details", "RRule", "Extent"]
+        width = max(len(field) for field in fields) + 1
+        content = [
+            f"[{FIELD_COLOR}]{field:<{width}}[/{FIELD_COLOR}] [white]{value if value is not None else '[dim]NULL[/dim]'}[/white]"
+            for field, value in zip(fields, record)
+        ]
+        # log_msg(f"Content: {content}")
+        return content
+
     def process_tag(self, tag, view: str):
         """
         Process the base26 tag entered by the user.
@@ -358,15 +398,19 @@ class Controller:
         elif view in ["next", "last", "find"]:
             tag_to_id = self.list_tag_to_id[view]
         else:
-            return "Invalid view."
+            return [
+                "Invalid view.",
+            ]
 
+        details = [f"Tag [{SELECTED_COLOR}]{tag}[/{SELECTED_COLOR}] details"]
         if tag in tag_to_id:
             record_id = tag_to_id[tag]
             # log_msg(f"Tag '{tag}' corresponds to record ID {record_id}")
-            details = self.get_record_details_as_string(record_id)
-            return details
+            # details = self.get_record_details_as_string(record_id)
+            fields = self.get_record_details(record_id)
+            return details + fields
 
-        return f"There is no item corresponding to tag '{tag}'."
+        return [f"There is no item corresponding to tag '{tag}'."]
 
     def generate_table(self, start_date, selected_week, grouped_events):
         """
@@ -476,10 +520,10 @@ class Controller:
             - return table
             - return details for selected_week
         """
-        today_year, today_week, today_weekday = datetime.now().isocalendar()
-        tomorrow_year, tomorrow_week, tomorrow_day = (
-            datetime.now() + ONEDAY
-        ).isocalendar()
+        # today_year, today_week, today_weekday = datetime.now().isocalendar()
+        # tomorrow_year, tomorrow_week, tomorrow_day = (
+        #     datetime.now() + ONEDAY
+        # ).isocalendar()
         current_start_year, current_start_week, _ = start_date.isocalendar()
         self.db_manager.extend_datetimes_for_weeks(
             current_start_year, current_start_week, 4
@@ -488,9 +532,10 @@ class Controller:
             start_date, start_date + timedelta(weeks=4)
         )
 
-        terminal_width = shutil.get_terminal_size().columns
+        # terminal_width = shutil.get_terminal_size().columns
         # Generate the table
         title, table = self.generate_table(start_date, selected_week, grouped_events)
+        log_msg(f"Generated table for {title}")
 
         if selected_week in self.yrwk_to_details:
             details = self.yrwk_to_details[selected_week]
@@ -517,7 +562,8 @@ class Controller:
         terminal_width = shutil.get_terminal_size().columns
 
         header = f"Items for {this_week} #{yr_wk[1]} ({len(events)})"
-        details = [f"[not bold][{HEADER_COLOR}]{header}[/{HEADER_COLOR}][/not bold]"]
+        # details = [f"[not bold][{HEADER_COLOR}]{header}[/{HEADER_COLOR}][/not bold]"]
+        details = [header]
 
         if not events:
             details.append(
@@ -603,7 +649,8 @@ class Controller:
         """
         events = self.db_manager.get_next_instances()
         header = f"Next instances ({len(events)})"
-        details = [f"[not bold][{HEADER_COLOR}]{header}[/{HEADER_COLOR}][/not bold]"]
+        # details = [f"[not bold][{HEADER_COLOR}]{header}[/{HEADER_COLOR}][/not bold]"]
+        details = [header]
 
         if not events:
             details.append(f" [{HEADER_COLOR}]Nothing found[/{HEADER_COLOR}]")
@@ -657,7 +704,8 @@ class Controller:
         """
         events = self.db_manager.get_last_instances()
         header = f"Last instances ({len(events)})"
-        details = [f"[not bold][{HEADER_COLOR}]{header}[/{HEADER_COLOR}][/not bold]"]
+        # details = [f"[not bold][{HEADER_COLOR}]{header}[/{HEADER_COLOR}][/not bold]"]
+        details = [header]
 
         if not events:
             details.append(f" [{HEADER_COLOR}]Nothing found[/{HEADER_COLOR}]")
@@ -710,8 +758,9 @@ class Controller:
         Fetch and format details for the next instances.
         """
         events = self.db_manager.find_records(search_str)
-        header = f"Records matching '{search_str}' ({len(events)})"
-        details = [f"[not bold][{HEADER_COLOR}]{header}[/{HEADER_COLOR}][/not bold]"]
+        header = f"Items containg a match for [{SELECTED_COLOR}]{search_str}[/{SELECTED_COLOR}] ({len(events)})"
+        # details = [f"[not bold][{HEADER_COLOR}]{header}[/{HEADER_COLOR}][/not bold]"]
+        details = [header]
 
         if not events:
             details.append(f" [{HEADER_COLOR}]Nothing found[/{HEADER_COLOR}]")

@@ -21,13 +21,16 @@ from textual.widget import Widget
 from textual.widgets import Input
 from textual.widgets import Label
 from textual.widgets import Markdown, Static, Footer, Header
+from textual.widgets import Placeholder
 import string
+import shutil
 
 
 VERSION = parse_version(etm_version)
 DAY_COLOR = NAMED_COLORS["LemonChiffon"]
 FRAME_COLOR = NAMED_COLORS["Khaki"]
-HEADER_COLOR = NAMED_COLORS["CornflowerBlue"]
+HEADER_COLOR = NAMED_COLORS["LightSkyBlue"]
+# HEADER_COLOR = NAMED_COLORS["LemonChiffon"]
 DIM_COLOR = NAMED_COLORS["DarkGray"]
 EVENT_COLOR = NAMED_COLORS["LimeGreen"]
 AVAILABLE_COLOR = NAMED_COLORS["LightSkyBlue"]
@@ -42,6 +45,7 @@ TODAY_COLOR = NAMED_COLORS["Tomato"]
 # SELECTED_BACKGROUND = "#4d4d4d"
 SELECTED_BACKGROUND = "#5d5d5d"
 MATCH_COLOR = NAMED_COLORS["Tomato"]
+TITLE_COLOR = NAMED_COLORS["Cornsilk"]
 
 
 # SELECTED_COLOR = NAMED_COLORS["Yellow"]
@@ -143,33 +147,97 @@ def calculate_4_week_start():
 
 
 HelpText = f"""\
-[bold][{HEADER_COLOR}]ETM {VERSION}[/{HEADER_COLOR}][/bold]
+[bold][{TITLE_COLOR}]ETM {VERSION}[/{TITLE_COLOR}][/bold]
 [bold][{HEADER_COLOR}]Application Keys[/{HEADER_COLOR}][/bold]
-  [bold]escape[/bold]:      previous screen     [bold]Q[/bold]:         Quit etm
+  [bold]Q[/bold]:         Quit etm
+[bold][{HEADER_COLOR}]Views[/{HEADER_COLOR}][/bold]
+  [bold]W[/bold]:           Weeks view          [bold]N[/bold]:         Next occurrences 
+  [bold]F[/bold]:           Find in items       [bold]L[/bold]:         Last occurrences 
 [bold][{HEADER_COLOR}]Search Keys[/{HEADER_COLOR}][/bold]
-  [bold]/[/bold]:           Set search          [bold]N[/bold]:         Next match 
-  [bold]escape[/bold]:      Clear search        [bold]P[/bold]:         Previous match           
+  [bold]/[/bold]:           Set search          [bold]>[/bold]:         Next match 
+  [bold]escape[/bold]:      Clear search        [bold]<[/bold]:         Previous match           
 [bold][{HEADER_COLOR}]Navigation Keys[/{HEADER_COLOR}][/bold]
-  [bold]left[/bold]:        previous week       [bold]up[/bold]:        up in the list view     
-  [bold]right[/bold]:       next week           [bold]down[/bold]:      down in the list view   
+  [bold]left[/bold]:        previous week       [bold]up[/bold]:        up in the list
+  [bold]right[/bold]:       next week           [bold]down[/bold]:      down in the list
   [bold]shift+left[/bold]:  previous 4-weeks    [bold]period[/bold]:    center week
   [bold]shift+right[/bold]: next 4-weeks        [bold]space[/bold]:     current 4-weeks 
+
+[bold][{HEADER_COLOR}]Tags[/{HEADER_COLOR}][/bold] Each of the main views displays a list of items, with each item beginning with an alphabetic tag that can be used to display the details of the item. E.g., to see the details of the item tagged 'a', simply press 'a' on the keyboard. These tags are sequentially generated from 'a', 'b', ..., 'z', 'ba', 'bb', and so forth. Just press the corresponding key for each character in the tag. 
 """.splitlines()
 
 
-class DetailsScreen(ModalScreen):
+class DetailsScreen(Screen):
     """A temporary details screen."""
+
+    # log_msg(f"DetailsScreen: {HelpText = }")
 
     def __init__(self, details: str):
         super().__init__()
-        self.details = details
+        self.title = details[0]
+        self.lines = details[1:]
+        self.footer = [
+            "",
+            "[bold yellow]ESC[/bold yellow] return to previus screen",
+        ]
 
     def compose(self) -> ComposeResult:
-        yield Static(f"Details\n{self.details}")
+        yield Static(self.title, id="details_title", classes="title-class")
+        yield Static("\n".join(self.lines), expand=True, id="details_text")
+        yield Static("\n".join(self.footer), id="custom_footer")
 
     def on_key(self, event):
         if event.key == "escape":
             self.app.pop_screen()
+
+
+# class DetailsScreen(ModalScreen):
+#     """A temporary details screen."""
+#
+#     def __init__(self, details: list[str]):
+#         super().__init__()
+#         self.title = details[0]  # Extract title
+#         self.lines = details[1:]  # Extract the rest as lines
+#
+#     def compose(self) -> ComposeResult:
+#         yield Static(self.title, id="details_title", classes="title-class")
+#         yield ScrollableList(self.lines, id="list")
+#         yield Static("[bold yellow]ESC[/bold yellow] Back", id="custom_footer")
+#
+#     def on_key(self, event):
+#         if event.key == "escape":
+#             self.app.pop_screen()
+#
+#
+# class DetailsScreen(ModalScreen):
+#     """A temporary details screen."""
+#
+#     def __init__(self, details: list[str]):
+#         super().__init__()
+#         self.title = details[0]  # Extract title
+#         self.lines = details[1:]  # Extract the rest as lines
+#         self.ALLOW_MAXIMIZE
+#
+#     def compose(self) -> ComposeResult:
+#         # Title at the top
+#         yield Static(self.title, id="details_title", classes="title-class")
+#
+#         # Scrollable container for the details
+#         details_text = "\n".join(self.lines)
+#         yield ScrollView(
+#             Static(
+#                 details_text,
+#                 id="details_text",
+#                 classes="details-class",
+#             )
+#         )
+#
+#         # Footer at the bottom
+#         yield Static("[bold yellow]ESC[/bold yellow] Back", id="custom_footer")
+#
+#     def on_key(self, event):
+#         if event.key == "escape":
+#             self.app.pop_screen()
+#
 
 
 class SearchScreen(Screen):
@@ -226,8 +294,11 @@ class ScrollableList(ScrollView):
 
         # Extract the title and remaining lines
         # self.title = Text.from_markup(title) if title else Text("Untitled")
+        width = shutil.get_terminal_size().columns - 3
         self.lines = [Text.from_markup(line) for line in lines]  # Exclude the title
-        self.virtual_size = Size(40, len(self.lines))  # Adjust virtual size for lines
+        self.virtual_size = Size(
+            width, len(self.lines)
+        )  # Adjust virtual size for lines
         self.console = Console()
         self.search_term = None
         self.matches = []
@@ -275,7 +346,10 @@ class ScrollableList(ScrollView):
         cropped_segments = Segment.adjust_line_length(
             segments, self.size.width, style=None
         )
-        return Strip(cropped_segments, self.size.width)
+        return Strip(
+            cropped_segments,
+            self.size.width,
+        )
 
 
 class WeeksScreen(Screen):
@@ -285,24 +359,25 @@ class WeeksScreen(Screen):
         self,
         title: str,
         table: str,
+        list_title: str,
         details: list[str],
         footer_content: str = "[bold yellow]?[/bold yellow] Help [bold yellow]/[/bold yellow] Search",
     ):
         super().__init__()
         self.table_title = title
         self.table = table
-        self.list_title = details[0]
-        self.lines = details[1:]
+        self.list_title = list_title
+        self.details = details
         self.footer_content = footer_content
 
     def compose(self) -> ComposeResult:
         # Display the table
-        yield Static(self.table_title, id="table_title", classes="list-title")
+        yield Static(self.table_title, id="table_title", classes="title-class")
         yield Static(self.table, id="table", classes="weeks-table")
 
         # Display the title and scrollable list
-        yield Static(self.list_title, id="list_title", classes="list-title")
-        yield ScrollableList(self.lines, id="list")  # Using "list" as the ID
+        yield Static(self.list_title, id="list_title", classes="title-class")
+        yield ScrollableList(self.details, id="list")
         yield Static(self.footer_content, id="custom_footer")
 
 
@@ -322,10 +397,11 @@ class FullScreenList(Screen):
             self.title = "Untitled"
             self.lines = []
         self.footer_content = footer_content
+        log_msg(f"FullScreenList: {details[:3] = }")
 
     def compose(self) -> ComposeResult:
         """Compose the layout."""
-        yield Static(self.title, id="list_title", classes="list-title")
+        yield Static(self.title, id="scroll_title", classes="title-class")
         yield ScrollableList(self.lines, id="list")  # Using "list" as the ID
         yield Static(self.footer_content, id="custom_footer")
 
@@ -345,6 +421,7 @@ class DynamicViewApp(App):
         ("shift+right", "next_period", ""),
         ("left", "previous_week", ""),
         ("right", "next_week", ""),
+        ("S", "take_screenshot", "Take Screenshot"),  # Add a key binding for 's'
         ("L", "show_last", "Show Last"),  # Bind 'L' for Last Instances
         ("N", "show_next", "Show Next"),  # Bind 'N' for Next Instances
         ("F", "show_find", "Find"),  # Bind 'F' for Find
@@ -367,6 +444,12 @@ class DynamicViewApp(App):
         self.view_mode = "list"  # Initial view is the ScrollableList
         self.view = "week"
         self.saved_lines = []
+
+    def action_take_screenshot(self):
+        """Save a screenshot of the current app state."""
+        screenshot_path = f"{self.view}_screenshot.svg"
+        self.save_screenshot(screenshot_path)
+        log_msg(f"Screenshot saved to: {screenshot_path}")
 
     def on_key(self, event):
         """Handle key events."""
@@ -427,9 +510,11 @@ class DynamicViewApp(App):
         title, table, details = self.controller.get_table_and_list(
             self.current_start_date, self.selected_week
         )
+        list_title = details[0]
+        details = details[1:]
         self.afill = 1 if len(details) <= 26 else 2 if len(details) <= 676 else 3
         footer = "[bold yellow]?[/bold yellow] Help [bold yellow]/[/bold yellow] Search"
-        self.push_screen(WeeksScreen(title, table, details, footer))
+        self.push_screen(WeeksScreen(title, table, list_title, details, footer))
 
     def action_show_last(self):
         """Show the 'Last' view."""
@@ -475,6 +560,7 @@ class DynamicViewApp(App):
                 '[bold yellow]"/"[/bold yellow] Search'
             )
             # Mount a FullScreenList to display the results
+            self.afill = 1 if len(results) <= 26 else 2 if len(results) <= 676 else 3
             self.push_screen(FullScreenList(results))
             # self.mount_full_screen_list(results, footer)
 
@@ -611,7 +697,7 @@ class DynamicViewApp(App):
             log_msg("No active ScrollableList found for the current view.")
 
     def action_show_help(self):
-        self.push_screen(DetailsScreen("\n".join(HelpText)))
+        self.push_screen(DetailsScreen(HelpText))
 
     def action_show_details(self, tag: str):
         """Show a temporary details screen for the selected item."""
@@ -622,67 +708,15 @@ class DynamicViewApp(App):
         """Exit the app."""
         self.exit()
 
-    # def replace_list_with(self, lines: list[str]):
-    #     """Replace the current ScrollableList with updated content, including a title."""
-    #     # Extract the title (always the first line)
-    #     if lines:
-    #         title = lines[0]  # Use the first line as the title
-    #         content_lines = lines[1:]  # Remaining lines as the scrollable content
-    #     else:
-    #         title = "Untitled"
-    #         content_lines = []
-    #
-    #     # Update the title widget
-    #     self.query_one("#list_title", Static).update(title)
-    #
-    #     # Reuse or replace the ScrollableList widget
-    #     try:
-    #         list_widget = self.query_one("#list", ScrollableList)
-    #         self.saved_lines = list_widget.lines
-    #         list_widget.lines = [Text.from_markup(line) for line in content_lines]
-    #         list_widget.virtual_size = Size(40, len(content_lines))
-    #         list_widget.refresh()
-    #     except LookupError:
-    #         # Create and mount a new ScrollableList if it doesn't exist
-    #         new_list = ScrollableList(content_lines, id="list")
-    #         self.main_container.mount(
-    #             new_list, after=self.query_one("#list_title", Static)
-    #         )
-    #
-    #     # self.view_mode = "info"
-    #
-    # def restore_list(self):
-    #     try:
-    #         list_widget = self.query_one("#list", ScrollableList)
-    #         list_widget.lines = self.saved_lines
-    #         list_widget.refresh()
-    #     except LookupError:
-    #         # Create and mount a new ScrollableList if it doesn't exist
-    #         new_list = ScrollableList(content_lines, id="list")
-    #         self.main_container.mount(
-    #             new_list, after=self.query_one("#list_title", Static)
-    #         )
-    #     # if self.view == "week":
-    #     #     self.action_show_weeks()
-    #     #     # """Restore the Weeks view."""
-    #     #     # self.update_table_and_list()
-    #     #     # self.view_mode = "weeks"
-    #     #     # self.update_footer()
-    #     # elif self.view == "last":
-    #     #     self.action_show_last()
-    #     # elif self.view == "next":
-    #     #     self.action_show_next()
-    #     # elif self.view == "find":
-    #     #     self.action_show_find()
-    #
-
     def update_table_and_list(self):
         """Update the table and scrollable list."""
         title, table, details = self.controller.get_table_and_list(
             self.current_start_date, self.selected_week
         )
 
+        log_msg(f"{title = }")
         # Update the table widget
+        self.query_one("#table_title", Static).update(title)
         self.query_one("#table", Static).update(table)
 
         # Extract the title (always the first line) and update the title widget
