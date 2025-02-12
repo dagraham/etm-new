@@ -24,6 +24,7 @@ from textual.widgets import Markdown, Static, Footer, Header
 from textual.widgets import Placeholder
 import string
 import shutil
+import asyncio
 
 
 VERSION = parse_version(etm_version)
@@ -42,8 +43,8 @@ PASTDUE_COLOR = NAMED_COLORS["DarkOrange"]
 BEGIN_COLOR = NAMED_COLORS["Gold"]
 INBOX_COLOR = NAMED_COLORS["OrangeRed"]
 TODAY_COLOR = NAMED_COLORS["Tomato"]
-# SELECTED_BACKGROUND = "#4d4d4d"
-SELECTED_BACKGROUND = "#5d5d5d"
+SELECTED_BACKGROUND = "#566573"
+# SELECTED_BACKGROUND = "#5d5d5d"
 MATCH_COLOR = NAMED_COLORS["Tomato"]
 TITLE_COLOR = NAMED_COLORS["Cornsilk"]
 
@@ -188,56 +189,6 @@ class DetailsScreen(Screen):
     def on_key(self, event):
         if event.key == "escape":
             self.app.pop_screen()
-
-
-# class DetailsScreen(ModalScreen):
-#     """A temporary details screen."""
-#
-#     def __init__(self, details: list[str]):
-#         super().__init__()
-#         self.title = details[0]  # Extract title
-#         self.lines = details[1:]  # Extract the rest as lines
-#
-#     def compose(self) -> ComposeResult:
-#         yield Static(self.title, id="details_title", classes="title-class")
-#         yield ScrollableList(self.lines, id="list")
-#         yield Static("[bold yellow]ESC[/bold yellow] Back", id="custom_footer")
-#
-#     def on_key(self, event):
-#         if event.key == "escape":
-#             self.app.pop_screen()
-#
-#
-# class DetailsScreen(ModalScreen):
-#     """A temporary details screen."""
-#
-#     def __init__(self, details: list[str]):
-#         super().__init__()
-#         self.title = details[0]  # Extract title
-#         self.lines = details[1:]  # Extract the rest as lines
-#         self.ALLOW_MAXIMIZE
-#
-#     def compose(self) -> ComposeResult:
-#         # Title at the top
-#         yield Static(self.title, id="details_title", classes="title-class")
-#
-#         # Scrollable container for the details
-#         details_text = "\n".join(self.lines)
-#         yield ScrollView(
-#             Static(
-#                 details_text,
-#                 id="details_text",
-#                 classes="details-class",
-#             )
-#         )
-#
-#         # Footer at the bottom
-#         yield Static("[bold yellow]ESC[/bold yellow] Back", id="custom_footer")
-#
-#     def on_key(self, event):
-#         if event.key == "escape":
-#             self.app.pop_screen()
-#
 
 
 class SearchScreen(Screen):
@@ -467,10 +418,53 @@ class DynamicViewApp(App):
                 self.digit_buffer.clear()
                 self.action_show_details(base26_tag)
 
-    def on_mount(self):
-        """Initial layout for the default view (Weeks)."""
-        # Fetch the default table and details for the Weeks view
+    # def on_mount(self):
+    #     """Initial layout for the default view (Weeks)."""
+    #     # Fetch the default table and details for the Weeks view
+    #     self.action_show_weeks()
+    #     """Start periodic alert checking when the app starts."""
+    #     self.set_interval(6, self.check_alerts)
+
+    async def on_mount(self):
+        """Start periodic alert checking aligned to 6-second intervals."""
         self.action_show_weeks()
+
+        # Get the current time
+        now = datetime.now()
+        seconds_to_next_multiple_of_6 = (
+            6 - (now.second % 6)
+        ) % 6  # Time until next multiple of 6
+
+        # ✅ Delay first execution to align with a multiple of 6 seconds
+        await asyncio.sleep(seconds_to_next_multiple_of_6)
+
+        # ✅ Now, start checking every 6 seconds from an aligned time
+        self.set_interval(6, self.check_alerts)
+
+    async def check_alerts(self):
+        """Check for due alerts and execute commands."""
+        now = datetime.now()
+        # Ensure populate_alerts() runs exactly once at midnight
+        if now.hour == 0 and now.minute == 0 and 0 <= now.second < 6:
+            self.controller.populate_alerts()
+
+        # just for testing
+        if now.minute % 10 == 0 and now.second == 0:
+            self.notify("Checking for due alerts...", severity="info")
+
+        self.controller.execute_due_alerts()
+
+        # alerts = self.controller.db_manager.get_due_alerts()
+        #
+        # for alert_id, record_id, timedelta, command, start_datetime, record_name in alerts:
+        #     execution_time = datetime.fromtimestamp(start_datetime - timedelta)
+        #     self.notify(f"Executing alert {alert_id} for {record_name} at {execution_time}", severity="info")
+        #
+        #     # Execute the command (ensure security)
+        #     try:
+        #         subprocess.run(command, shell=True, check=True)
+        #     except subprocess.CalledProcessError as e:
+        #         self.notify(f"Alert {alert_id} failed: {e}", severity="error")
 
     def mount_full_screen_list(self, details: list[str], footer_content: str):
         """Mount a full-screen list with the given details and footer content."""
@@ -485,24 +479,24 @@ class DynamicViewApp(App):
         full_screen_list = FullScreenList(details, footer_content)
         self.mount(full_screen_list)  # Mount the full-screen list directly
 
-    def update_scrollable_list(self, lines: list[str], title: str):
-        """Update the ScrollableList with new content."""
-        try:
-            # Update the title widget
-            title_widget = self.query_one("#list_title", Static)
-            title_widget.update(title)
-        except LookupError:
-            # Handle case where title widget doesn't exist (unlikely)
-            pass
-
-        # Update or refresh the ScrollableList
-        try:
-            scrollable_list = self.query_one("#list", ScrollableList)
-            scrollable_list.lines = [Text.from_markup(line) for line in lines]
-            scrollable_list.refresh()
-        except LookupError:
-            # If no ScrollableList exists, log or handle as needed
-            pass
+    # def update_scrollable_list(self, lines: list[str], title: str):
+    #     """Update the ScrollableList with new content."""
+    #     try:
+    #         # Update the title widget
+    #         title_widget = self.query_one("#list_title", Static)
+    #         title_widget.update(title)
+    #     except LookupError:
+    #         # Handle case where title widget doesn't exist (unlikely)
+    #         pass
+    #
+    #     # Update or refresh the ScrollableList
+    #     try:
+    #         scrollable_list = self.query_one("#list", ScrollableList)
+    #         scrollable_list.lines = [Text.from_markup(line) for line in lines]
+    #         scrollable_list.refresh()
+    #     except LookupError:
+    #         # If no ScrollableList exists, log or handle as needed
+    #         pass
 
     def action_show_weeks(self):
         """Switch back to the Weeks view."""
@@ -585,17 +579,6 @@ class DynamicViewApp(App):
 
         self.query_one("#custom_footer", Static).update_content(footer_content)
 
-    # def action_start_search(self):
-    #     """Show the search input widget."""
-    #     self.search_term = ""  # Clear the previous search term
-    #     search_input = Input(placeholder="Search...", id="search")
-    #     self.query_one("#custom_footer", Static).update(
-    #         "[bold yellow]?[/bold yellow] Help [bold yellow]/[/bold yellow] Search Mode"
-    #     )
-    #     # self.push_screen(search_input)
-    #     self.mount(search_input)  # Mount the search input widget to the app
-    #     self.set_focus(search_input)
-
     def action_start_search(self):
         """Show the search input widget for inline search."""
         search_input = Input(placeholder="Search...", id="search")
@@ -630,26 +613,6 @@ class DynamicViewApp(App):
             )
         except LookupError:
             log_msg("Footer not found to update.")
-
-    # def action_next_match(self):
-    #     """Scroll to the next match."""
-    #     scrollable_list = self.query_one("#list", ScrollableList)
-    #     current_y = scrollable_list.scroll_offset.y
-    #     next_match = next((i for i in scrollable_list.matches if i > current_y), None)
-    #     if next_match is not None:
-    #         scrollable_list.scroll_to(0, next_match)  # Use scroll_to for scrolling
-    #         scrollable_list.refresh()
-    #
-    # def action_previous_match(self):
-    #     """Scroll to the previous match."""
-    #     scrollable_list = self.query_one("#list", ScrollableList)
-    #     current_y = scrollable_list.scroll_offset.y
-    #     previous_match = next(
-    #         (i for i in reversed(scrollable_list.matches) if i < current_y), None
-    #     )
-    #     if previous_match is not None:
-    #         scrollable_list.scroll_to(0, previous_match)  # Use scroll_to for scrolling
-    #         scrollable_list.refresh()
 
     def action_next_match(self):
         """Scroll to the next match."""

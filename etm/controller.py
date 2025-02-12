@@ -23,17 +23,20 @@ from prompt_toolkit.keys import Keys
 from prompt_toolkit.shortcuts import PromptSession
 import string
 import shutil
+import subprocess
+import shlex
 from typing import Literal
 
 from .model import DatabaseManager
 
 from .common import log_msg, display_messages, truncate_string, wrap, format_extent
 
-
+# The overall background color of the app is #2e2e2e - set in view_textual.css
 DAY_COLOR = NAMED_COLORS["LemonChiffon"]
 FRAME_COLOR = NAMED_COLORS["Grey"]
 DIM_COLOR = NAMED_COLORS["DarkGray"]
-EVENT_COLOR = NAMED_COLORS["LimeGreen"]
+# EVENT_COLOR = NAMED_COLORS["LimeGreen"]
+EVENT_COLOR = NAMED_COLORS["LightGreen"]
 AVAILABLE_COLOR = NAMED_COLORS["LightSkyBlue"]
 WAITING_COLOR = NAMED_COLORS["SlateGrey"]
 FINISHED_COLOR = NAMED_COLORS["DarkGrey"]
@@ -43,13 +46,17 @@ PASTDUE_COLOR = NAMED_COLORS["DarkOrange"]
 BEGIN_COLOR = NAMED_COLORS["Gold"]
 INBOX_COLOR = NAMED_COLORS["OrangeRed"]
 TODAY_COLOR = NAMED_COLORS["Tomato"]
+SELECTED_BACKGROUND = "#4e4e4e"
+# SELECTED_BACKGROUND = "#3b3b3b"
+# SELECTED_BACKGROUND = "#3d3d3d"
 # SELECTED_BACKGROUND = "#4d4d4d"
 # SELECTED_BACKGROUND = "#5d5d5d"
-SELECTED_BACKGROUND = "#737373"
+# SELECTED_BACKGROUND = "#737373"
 
 BUSY_COLOR = NAMED_COLORS["YellowGreen"]
 CONF_COLOR = NAMED_COLORS["Tomato"]
-BUSY_FRAME_COLOR = NAMED_COLORS["DimGrey"]
+BUSY_FRAME_COLOR = "#4e4e4e"
+# BUSY_FRAME_COLOR = NAMED_COLORS["DimGrey"]
 SLOT_HOURS = [0, 4, 8, 12, 16, 20, 24]
 SLOT_MINUTES = [x * 60 for x in SLOT_HOURS]
 BUSY = "■"  # U+25A0 this will be busy_bar busy and conflict character
@@ -80,7 +87,8 @@ TYPE_TO_COLOR = {
 }
 
 # FIXME: This should be in a config file
-HRS_MINS = "12"  # 12 or 24 - make this the default
+# HRS_MINS = "12"  # 12 or 24 - make this the default
+HRS_MINS = "24"  # 12 or 24 - make this the default
 
 
 def format_hours_mins(dt: datetime, mode: Literal["24", "12"]) -> str:
@@ -149,6 +157,28 @@ def calculate_4_week_start():
     return start_of_week - timedelta(weeks=weeks_into_cycle)
 
 
+# def base26_to_decimal(base26_num):
+#     """
+#     Convert an arbitrary-length base-26 number to its decimal equivalent.
+#
+#     Args:
+#         base26_num (str): A base-26 string using 'a' as 0 and 'z' as 25.
+#
+#     Returns:
+#         int: The decimal equivalent of the base-26 number.
+#     """
+#     decimal_value = 0
+#     length = len(base26_num)
+#
+#     # Process each character in the base-26 string
+#     for i, char in enumerate(base26_num):
+#         digit = ord(char) - ord("a")  # Map 'a' to 0, ..., 'z' to 25
+#         power = length - i - 1  # Compute the power of 26
+#         decimal_value += digit * (26**power)
+#
+#     return decimal_value
+
+
 def decimal_to_base26(decimal_num):
     """
     Convert a decimal number to its equivalent base-26 string.
@@ -176,35 +206,6 @@ def decimal_to_base26(decimal_num):
 
 def base26_to_decimal(base26_num):
     """
-    Convert an arbitrary-length base-26 number to its decimal equivalent.
-
-    Args:
-        base26_num (str): A base-26 string using 'a' as 0 and 'z' as 25.
-
-    Returns:
-        int: The decimal equivalent of the base-26 number.
-    """
-    decimal_value = 0
-    length = len(base26_num)
-
-    # Process each character in the base-26 string
-    for i, char in enumerate(base26_num):
-        digit = ord(char) - ord("a")  # Map 'a' to 0, ..., 'z' to 25
-        power = length - i - 1  # Compute the power of 26
-        decimal_value += digit * (26**power)
-
-    return decimal_value
-
-
-def indx_to_tag(indx: int, fill: int = 1):
-    """
-    Convert an index to a base-26 tag.
-    """
-    return decimal_to_base26(indx).rjust(fill, "a")
-
-
-def base26_to_decimal(base26_num):
-    """
     Convert a 2-digit base-26 number to its decimal equivalent.
 
     Args:
@@ -225,6 +226,13 @@ def base26_to_decimal(base26_num):
     decimal_value = digit1 * 26**1 + digit2 * 26**0
 
     return decimal_value
+
+
+def indx_to_tag(indx: int, fill: int = 1):
+    """
+    Convert an index to a base-26 tag.
+    """
+    return decimal_to_base26(indx).rjust(fill, "a")
 
 
 def event_tuple_to_minutes(start_dt: datetime, end_dt: datetime) -> Tuple[int, int]:
@@ -360,13 +368,48 @@ class Controller:
         if not record:
             return f"[red]No record found for ID {record_id}[/red]"
 
-        fields = ["Id", "Type", "Name", "Details", "RRule", "Extent"]
+        fields = ["Id", "Type", "Name e", "Details", "RRule", "Extent"]
         content = "\n".join(
             f" [cyan]{field}:[/cyan] [white]{value if value is not None else '[dim]NULL[/dim]'}[/white]"
             for field, value in zip(fields, record)
         )
         # log_msg(f"Content: {content}")
         return content
+
+    def populate_alerts(self):
+        self.db_manager.populate_alerts()
+
+    def execute_alert(self, command: str):
+        """
+        Execute the given alert command using subprocess.
+
+        Args:
+            command (str): The command string to execute.
+        """
+        if not command:
+            print("❌ Error: No command provided to execute.")
+            return
+
+        try:
+            # ✅ Use shlex.split() to safely parse the command
+            subprocess.run(shlex.split(command), check=True)
+            print(f"✅ Successfully executed: {command}")
+        except subprocess.CalledProcessError as e:
+            print(f"❌ Error executing command: {command}\n{e}")
+        except FileNotFoundError:
+            print(f"❌ Command not found: {command}")
+        except Exception as e:
+            print(f"❌ Unexpected error: {e}")
+
+    def execute_due_alerts(self):
+        records = self.db_manager.get_due_alerts()
+        # SELECT alert_id, record_id, record_name, start_datetime, timedelta, command
+        for record in records:
+            alert_id, record_id, trigger_datetime, alert_command = record
+            log_msg(f"Executing alert {alert_command = }, {trigger_datetime = }")
+            self.execute_alert(alert_command)
+            # need command to execute command with arguments
+            self.db_manager.mark_alert_executed(alert_id)
 
     def get_record_details(self, record_id):
         """
@@ -691,7 +734,8 @@ class Controller:
             start_dt = datetime.fromtimestamp(start_ts)
             # log_msg(f"Week details {name = }, {start_dt = }, {end_dt = }")
             monthday = start_dt.strftime("%d")
-            start_end = f"{start_dt.strftime('%-d %H:%M'):>8}"
+            # start_end = f"{start_dt.strftime('%-d %H:%M'):>8}"
+            start_end = f"{format_hours_mins(start_dt, HRS_MINS):>8}"
             type_color = TYPE_TO_COLOR[type]
             escaped_start_end = f"[not bold]{start_end}[/not bold]"
             row = [
@@ -746,7 +790,8 @@ class Controller:
             start_dt = datetime.fromtimestamp(start_ts)
             # log_msg(f"Week details {name = }, {start_dt = }, {end_dt = }")
             monthday = start_dt.strftime("%d")
-            start_end = f"{start_dt.strftime('%-d %H:%M'):>8}"
+            # start_end = f"{start_dt.strftime('%-d %H:%M'):>8}"
+            start_end = f"{format_hours_mins(start_dt, HRS_MINS):>8}"
             type_color = TYPE_TO_COLOR[type]
             escaped_start_end = f"[not bold]{start_end}[/not bold]"
             row = [

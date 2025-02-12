@@ -4,12 +4,12 @@ import inspect
 from typing import Optional
 from bisect import bisect_left, bisect_right
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, date, timedelta
 from dateutil.rrule import rrulestr
 from typing import List, Tuple
 from prompt_toolkit.styles.named_colors import NAMED_COLORS
 
-from .common import log_msg, display_messages
+from .common import log_msg, display_messages, duration_in_words, fmt_dt, fmt_td
 import re
 
 
@@ -21,20 +21,25 @@ def regexp(pattern, value):
 
 
 # Constants for busy bar rendering
-BUSY_COLOR = NAMED_COLORS["YellowGreen"]
-CONF_COLOR = NAMED_COLORS["Tomato"]
-FRAME_COLOR = NAMED_COLORS["DimGrey"]
-SLOT_HOURS = [0, 4, 8, 12, 16, 20, 24]
-SLOT_MINUTES = [x * 60 for x in SLOT_HOURS]
-BUSY = "■"  # U+25A0 this will be busy_bar busy and conflict character
-FREE = "□"  # U+25A1 this will be busy_bar free character
-ADAY = "━"  # U+2501 for all day events ━
+# BUSY_COLOR = NAMED_COLORS["YellowGreen"]
+# CONF_COLOR = NAMED_COLORS["Tomato"]
+# FRAME_COLOR = NAMED_COLORS["DimGrey"]
+# SLOT_HOURS = [0, 4, 8, 12, 16, 20, 24]
+# SLOT_MINUTES = [x * 60 for x in SLOT_HOURS]
+# BUSY = "■"  # U+25A0 this will be busy_bar busy and conflict character
+# FREE = "□"  # U+25A1 this will be busy_bar free character
+# ADAY = "━"  # U+2501 for all day events ━
 
 DEFAULT_LOG_FILE = "log_msg.md"
 
+# TODO: these should be in a config file
+ALERT_COMMANDS = {
+    "d": "/usr/bin/say -v 'Alex' '{name}, {when} at {time}'",
+}
+
 
 class DatabaseManager:
-    def __init__(self, db_path, replace=False):
+    def __init__(self, db_path, reset=False):
         """
         Initialize the database manager and optionally replace the database.
 
@@ -43,33 +48,31 @@ class DatabaseManager:
             replace (bool): Whether to replace the existing database.
         """
         self.db_path = db_path
-        if replace and os.path.exists(db_path):
+        if reset and os.path.exists(db_path):
             os.remove(db_path)
         self.conn = sqlite3.connect(self.db_path)
         self.cursor = self.conn.cursor()
-        # self.conn: Optional[sqlite3.Connection] = None
-        # self.cursor: Optional[sqlite3.Cursor] = None
         self.conn.create_function("REGEXP", 2, regexp)
         self.setup_database()
         yr, wk = datetime.now().isocalendar()[:2]
         log_msg(f"Generating weeks for 12 weeks starting from {yr} week number {wk}")
         self.extend_datetimes_for_weeks(yr, wk, 12)
+        self.populate_alerts()
 
     def setup_database(self):
         """
         Set up the SQLite database schema.
         """
-        # self.conn = sqlite3.connect(self.db_path)
-        # self.cursor = self.conn.cursor()
-
         self.cursor.execute("""
         CREATE TABLE IF NOT EXISTS Records (
-            id INTEGER PRIMARY KEY,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             type TEXT CHECK(type IN ('*', '-', '~', '^')) NOT NULL,
             name TEXT NOT NULL,
             details TEXT,
             rrulestr TEXT,
             extent INTEGER,
+            alerts TEXT,
+            location TEXT,
             processed INTEGER DEFAULT 0
         )
         """)
@@ -92,7 +95,220 @@ class DatabaseManager:
         )
         """)
 
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Alerts (
+                alert_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                record_id INTEGER NOT NULL,
+                trigger_datetime INTEGER NOT NULL,
+                alert_command TEXT NOT NULL,
+                FOREIGN KEY (record_id) REFERENCES Records(id) ON DELETE CASCADE
+            )
+        """)
         self.conn.commit()
+
+    def add_record(self, record_type, name, details, rrstr, extent, alerts, location):
+        """
+        Add a new record to the database.
+        """
+        # log_msg(
+        #     f"Adding record: {record_type = } {name = } {details = } {rrstr = } {extent = } {alerts = } {location = }"
+        # )
+        self.cursor.execute(
+            "INSERT INTO Records (type, name, details, rrulestr, extent, alerts, location) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (record_type, name, details, rrstr, extent, alerts, location),
+        )
+        new_record_id = self.cursor.lastrowid  # Retrieve the new record ID
+        self.conn.commit()
+        log_msg(f"Added record {name} with ID {new_record_id}.")
+        return new_record_id  # Return the ID to the caller
+
+        # For future reference, this is how you can add a new column to an existing table:
+        # # ✅ Check if 'alerts' column exists, and add it if missing
+        # self.cursor.execute("PRAGMA table_info(Records);")
+        # existing_columns = {row[1] for row in self.cursor.fetchall()}  # Column names
+        #
+        # if "alerts" not in existing_columns:
+        #     self.cursor.execute(
+        #         "ALTER TABLE Records ADD COLUMN alerts TEXT DEFAULT '';"
+        #     )
+        #     self.conn.commit()
+
+    def get_due_alerts(self):
+        """Retrieve alerts that need execution within the next 6 seconds."""
+        now = round(datetime.now().timestamp())
+
+        self.cursor.execute(
+            """
+            SELECT alert_id, record_id, trigger_datetime, alert_command
+            FROM Alerts
+            WHERE (trigger_datetime) BETWEEN ? AND ?
+        """,
+            (now, now + 6),
+        )
+
+        return self.cursor.fetchall()
+
+    def get_all_alerts(self):
+        """Retrieve all stored alerts for debugging."""
+        self.cursor.execute("""
+            SELECT alert_id, record_id, record_name, start_datetime, timedelta, command
+            FROM Alerts
+            ORDER BY start_datetime ASC
+        """)
+        alerts = self.cursor.fetchall()
+
+        if not alerts:
+            return [
+                "🔔 No alerts found.",
+            ]
+
+        results = [
+            "🔔 Current Alerts:",
+        ]
+        for alert in alerts:
+            alert_id, record_id, record_name, start_dt, td, command = alert
+            execution_time = start_dt - td  # When the alert is scheduled to run
+            formatted_time = datetime.fromtimestamp(execution_time).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+
+            results.append((alert_id, record_id, record_name, formatted_time, command))
+            print(
+                f"  [{alert_id}] {record_name} (Record {record_id}) → {command} at {formatted_time}"
+            )
+
+        return results
+
+    def mark_alert_executed(self, alert_id):
+        """Optional: Mark alert as executed to prevent duplicate execution."""
+        self.cursor.execute(
+            """
+            DELETE FROM Alerts WHERE alert_id = ?
+        """,
+            (alert_id,),
+        )
+        self.conn.commit()
+
+    def create_alert(
+        self,
+        command,
+        timedelta,
+        start_datetime,
+        record_id,
+        record_name,
+        record_details,
+        record_location,
+    ):
+        alert_command = ALERT_COMMANDS.get(command, "")
+        if not alert_command:
+            log_msg(f"❌ Alert command not found for '{command}'")
+            return None  # Explicitly return None if command is missing
+
+        today = date.today()
+        name = record_name
+        details = record_details
+        location = record_location
+
+        if timedelta > 0:
+            when = f"in {duration_in_words(timedelta)}"
+        elif timedelta == 0:
+            when = "now"
+        else:
+            when = f"{duration_in_words(-timedelta)} ago"
+
+        start = fmt_dt(start_datetime, "datetime")
+        time = (
+            fmt_dt(start_datetime, "time")
+            if datetime.fromtimestamp(start_datetime).date() == today
+            else fmt_dt(start_datetime, "date")
+        )
+        log_msg(f"raw alert {alert_command = }")
+        alert_command = alert_command.format(
+            name=name,
+            when=when,
+            time=time,
+            details=details,
+            location=location,
+            start=start,
+        )
+        log_msg(f"formatted alert {alert_command = }")
+        return alert_command
+
+    def populate_alerts(self):
+        """
+        Populate the Alerts table for all records that have alerts defined.
+        Alerts are only added if they are scheduled to trigger today.
+        """
+        # ✅ Step 1: Clear existing alerts
+        self.cursor.execute("DELETE FROM Alerts;")
+        self.conn.commit()
+
+        # ✅ Step 2: Find all records with non-empty alerts
+        self.cursor.execute(
+            """
+            SELECT R.id, R.name, R.details, R.location, R.alerts, D.start_datetime 
+            FROM Records R
+            JOIN DateTimes D ON R.id = D.record_id
+            WHERE R.alerts IS NOT NULL AND R.alerts != ''
+            """
+        )
+        records = self.cursor.fetchall()
+
+        if not records:
+            print("🔔 No records with alerts found.")
+            return
+
+        now = round(datetime.now().timestamp())  # Current timestamp
+        midnight = round(
+            (datetime.now().replace(hour=23, minute=59, second=59)).timestamp()
+        )  # Midnight timestamp
+
+        # ✅ Step 3: Process alerts for each record
+        for (
+            record_id,
+            record_name,
+            record_details,
+            record_location,
+            alerts_str,
+            start_datetime,
+        ) in records:
+            start_dt = datetime.fromtimestamp(
+                start_datetime
+            )  # Convert timestamp to datetime
+            today = date.today()
+
+            for alert in alerts_str.split(";"):
+                if ":" not in alert:
+                    continue  # Ignore malformed alerts
+
+                time_part, command_part = alert.split(":")
+                timedelta_values = [int(t.strip()) for t in time_part.split(",")]
+                commands = [cmd.strip() for cmd in command_part.split(",")]
+
+                for td in timedelta_values:
+                    trigger_time = start_datetime - td  # When the alert should trigger
+
+                    # ✅ Only insert alerts that will trigger before midnight and after now
+                    if now <= trigger_time < midnight:
+                        for command in commands:
+                            alert_command = self.create_alert(
+                                command,
+                                td,
+                                start_datetime,
+                                record_id,
+                                record_name,
+                                record_details,
+                                record_location,
+                            )
+
+                            if alert_command:  # ✅ Ensure it's valid before inserting
+                                self.cursor.execute(
+                                    "INSERT INTO Alerts (record_id, trigger_datetime, alert_command) VALUES (?, ?, ?)",
+                                    (record_id, trigger_time, alert_command),
+                                )
+
+        self.conn.commit()
+        log_msg("✅ Alerts table updated with today's relevant alerts.")
 
     def extend_datetimes_for_weeks(self, start_year, start_week, weeks):
         """

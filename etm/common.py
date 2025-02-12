@@ -208,6 +208,123 @@ def format_extent(
     return f"{beg_fmt}{beg_suffix}-{end_fmt}{end_suffix}"
 
 
+def fmt_td(seconds: int, short=True):
+    """
+    Format seconds as a human readable string
+    if short report only biggest 2, else all
+    >>> td = timedelta(weeks=1, days=2, hours=3, minutes=27).total_seconds()
+    >>> fmt_td(td)
+    '1w2d3h27m'
+    """
+    if type(seconds) is not int:
+        return "?"
+    if seconds <= 0:
+        return ""
+    try:
+        total_seconds = abs(seconds)
+        until = []
+        days = hours = minutes = 0
+        if total_seconds:
+            seconds = total_seconds % 60
+            minutes = total_seconds // 60
+            if minutes >= 60:
+                hours = minutes // 60
+                minutes = minutes % 60
+            if hours >= 24:
+                days = hours // 24
+                hours = hours % 24
+        if days:
+            until.append(f"{days}d")
+        if hours:
+            until.append(f"{hours}h")
+        if minutes:
+            until.append(f"{minutes}m")
+        # if seconds:
+        #     until.append(f"{seconds}s")
+        if not until:
+            until.append("0m")
+        ret = "".join(until[:2]) if short else "".join(until)
+        return ret
+    except Exception as e:
+        log_msg(f"{seconds}: {e}")
+        return ""
+
+
+def fmt_dt(dt: int, fmt: Literal["date", "time", "datetime"] = "datetime"):
+    """
+    Format seconds as a human readable string
+    >>> fmt_dt(1610386800)
+    '2021-01-11 00:00:00'
+    """
+    # log_msg(f"dt: {dt}")
+    fmt = (
+        "%y-%m-%d" if fmt == "date" else "%H:%M" if fmt == "time" else "%Y-%m-%d %H:%M"
+    )
+    if type(dt) is not int:
+        return "?"
+    if dt <= 0:
+        return ""
+    return datetime.fromtimestamp(dt).strftime(fmt)
+
+
+def duration_in_words(seconds: int, short=False):
+    """
+    Return string representing weeks, days, hours and minutes. Drop any remaining seconds.
+    >>> td = timedelta(weeks=1, days=2, hours=3, minutes=27)
+    >>> format_duration(td)
+    '1 week 2 days 3 hours 27 minutes'
+    """
+    try:
+        until = []
+        total_seconds = int(seconds)
+        weeks = days = hours = minutes = seconds = 0
+        if total_seconds:
+            sign = "" if total_seconds > 0 else "- "
+            total_seconds = abs(total_seconds)
+            seconds = total_seconds % 60
+            minutes = total_seconds // 60
+            if minutes >= 60:
+                hours = minutes // 60
+                minutes = minutes % 60
+            if hours >= 24:
+                days = hours // 24
+                hours = hours % 24
+            if days >= 7:
+                weeks = days // 7
+                days = days % 7
+        if weeks:
+            if weeks > 1:
+                until.append(f"{sign}{weeks} weeks")
+            else:
+                until.append(f"{sign}{weeks} week")
+        if days:
+            if days > 1:
+                until.append(f"{sign}{days} days")
+            else:
+                until.append(f"{sign}{days} day")
+        if hours:
+            if hours > 1:
+                until.append(f"{sign}{hours} hours")
+            else:
+                until.append(f"{sign}{hours} hour")
+        if minutes:
+            if minutes > 1:
+                until.append(f"{sign}{minutes} minutes")
+            else:
+                until.append(f"{sign}{minutes} minute")
+        if seconds:
+            if seconds > 1:
+                until.append(f"{sign}{seconds} seconds")
+            else:
+                until.append(f"{sign}{seconds} second")
+        if not until:
+            until.append("zero minutes")
+        ret = " ".join(until[:2]) if short else " ".join(until)
+        return ret
+    except Exception as e:
+        return None
+
+
 class TimeIt(object):
     def __init__(self, label="", loglevel=1):
         self.loglevel = loglevel
