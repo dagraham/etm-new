@@ -135,7 +135,7 @@ def timeit(message: str = "") -> Callable[[Callable[..., Any]], Callable[..., An
     return decorator
 
 
-def drop_zero_minutes(dt, mode: Literal["24", "12"]):
+def drop_zero_minutes(dt, mode: Literal["24", "12"], end=False):
     """
     >>> drop_zero_minutes(parse('2018-03-07 10am'))
     '10'
@@ -143,30 +143,33 @@ def drop_zero_minutes(dt, mode: Literal["24", "12"]):
     '2:45'
     """
     show_minutes = True if mode == "24" else False
+    # show_minutes = False
     # logger.debug(f"starting {dt = }; {ampm = }; {show_minutes = }")
     # logger.debug(f"{dt.replace(tzinfo=None) = }")
     dt = dt.replace(tzinfo=None)
     # logger.debug(f"{dt = }")
+    # if show_minutes:
     if show_minutes:
         if mode == "12":
             return dt.strftime("%-I:%M").rstrip("M").lower()
         else:
-            return dt.strftime("%H:%M")
+            return dt.strftime("%-H:%M")
     else:
         if dt.minute == 0:
             if mode == "12":
                 return dt.strftime("%-I")
             else:
-                return dt.strftime("%H")
+                # return dt.strftime("%-Hh") if end else dt.strftime("%-H")
+                return dt.strftime("%-H") if end else dt.strftime("%-H")
         else:
             if mode == "12":
                 return dt.strftime("%-I:%M").rstrip("M").lower()
             else:
-                return dt.strftime("%H:%M")
+                return dt.strftime("%-H:%M")
 
 
 def format_extent(
-    beg_dt: datetime, end_dt: datetime, mode: str = Literal["24", 12]
+    beg_dt: datetime, end_dt: datetime, mode: str = Literal["24", "12"]
 ) -> str:
     """
     Format the beginning to ending times to display for a reminder with an extent (both @s and @e).
@@ -178,6 +181,7 @@ def format_extent(
     >>> fmt_extent(beg_dt, end_dt)
     '10am-2pm'
     """
+    log_msg(f"{beg_dt = }; {end_dt = }; {mode = }")
     beg_suffix = ""
     end_suffix = end_dt.strftime("%p").lower().rstrip("m") if mode == "12" else ""
     if beg_dt == end_dt:
@@ -190,8 +194,11 @@ def format_extent(
 
     if end_dt.hour == 23 and end_dt.minute == 59 and end_dt.second == 59:
         # end_dt = end_dt.replace(hour=0, minute=0, second=0)
-        end_dt = end_dt + timedelta(seconds=1)
+        log_msg(f"end_dt: {end_dt = }")
+        # end_dt = end_dt + timedelta(seconds=1)
+        log_msg(f"end_dt adjusted: {end_dt = }")
         end_suffix = "a" if mode == "12" else ""
+        # end_fmt = "12" if mode == "12" else "24"
 
     if mode == "12":
         diff = (beg_dt.hour < 12 and end_dt.hour >= 12) or (
@@ -200,10 +207,14 @@ def format_extent(
         beg_suffix = beg_dt.strftime("%p").lower().rstrip("m") if diff else ""
 
     beg_fmt = drop_zero_minutes(beg_dt, mode)
-    end_fmt = drop_zero_minutes(end_dt, mode)
+    end_fmt = drop_zero_minutes(end_dt, mode, end=True)
+    log_msg(f"end: {end_dt = }; {end_fmt = }")
     if mode == "12":
         beg_fmt = beg_fmt.lstrip("0")
         end_fmt = end_fmt.lstrip("0")
+    # else:
+    #     beg_fmt = beg_fmt.lstrip("0")
+    #     end_fmt = end_fmt.lstrip("0")
 
     return f"{beg_fmt}{beg_suffix}-{end_fmt}{end_suffix}"
 
@@ -322,6 +333,7 @@ def duration_in_words(seconds: int, short=False):
         ret = " ".join(until[:2]) if short else " ".join(until)
         return ret
     except Exception as e:
+        log_msg(f"{seconds = } raised exception: {e}")
         return None
 
 

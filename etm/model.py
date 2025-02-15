@@ -1,15 +1,23 @@
 import os
 import sqlite3
-import inspect
 from typing import Optional
-from bisect import bisect_left, bisect_right
-from collections import defaultdict
+
+# from bisect import bisect_left, bisect_right
+# from collections import defaultdict
 from datetime import datetime, date, timedelta
 from dateutil.rrule import rrulestr
 from typing import List, Tuple
 from prompt_toolkit.styles.named_colors import NAMED_COLORS
 
-from .common import log_msg, display_messages, duration_in_words, fmt_dt, fmt_td
+from .shared import (
+    HRS_MINS,
+    ALERT_COMMANDS,
+    log_msg,
+    format_datetime,
+    duration_in_words,
+    datetime_in_words,
+)
+
 import re
 
 
@@ -31,11 +39,6 @@ def regexp(pattern, value):
 # ADAY = "━"  # U+2501 for all day events ━
 
 DEFAULT_LOG_FILE = "log_msg.md"
-
-# TODO: these should be in a config file
-ALERT_COMMANDS = {
-    "d": "/usr/bin/say -v 'Alex' '{name}, {when} at {time}'",
-}
 
 
 class DatabaseManager:
@@ -99,7 +102,10 @@ class DatabaseManager:
             CREATE TABLE IF NOT EXISTS Alerts (
                 alert_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 record_id INTEGER NOT NULL,
+                record_name TEXT NOT NULL,
                 trigger_datetime INTEGER NOT NULL,
+                start_datetime INTEGER NOT NULL,
+                alert_name TEXT NOT NULL,
                 alert_command TEXT NOT NULL,
                 FOREIGN KEY (record_id) REFERENCES Records(id) ON DELETE CASCADE
             )
@@ -139,14 +145,55 @@ class DatabaseManager:
 
         self.cursor.execute(
             """
-            SELECT alert_id, record_id, trigger_datetime, alert_command
+            SELECT alert_id, record_id, trigger_datetime, start_datetime, alert_name, alert_command
             FROM Alerts
             WHERE (trigger_datetime) BETWEEN ? AND ?
         """,
-            (now, now + 6),
+            (now - 3, now + 3),
         )
 
         return self.cursor.fetchall()
+
+    def get_active_alerts(self):
+        """Retrieve alerts that will trigger on or after the current moment and before midnight."""
+
+        self.cursor.execute(
+            """
+            SELECT alert_id, record_id, record_name, trigger_datetime, start_datetime, alert_name, alert_command
+            FROM Alerts
+            ORDER BY trigger_datetime ASC
+            """,
+        )
+
+        alerts = self.cursor.fetchall()
+
+        if not alerts:
+            return []
+
+        results = []
+        for alert in alerts:
+            (
+                alert_id,
+                record_id,
+                record_name,
+                trigger_datetime,
+                start_datetime,
+                alert_name,
+                alert_command,
+            ) = alert
+            results.append(
+                [
+                    alert_id,
+                    record_id,
+                    record_name,
+                    trigger_datetime,
+                    start_datetime,
+                    alert_name,
+                    alert_command,
+                ]
+            )
+
+        return results
 
     def get_all_alerts(self):
         """Retrieve all stored alerts for debugging."""
@@ -172,10 +219,7 @@ class DatabaseManager:
                 "%Y-%m-%d %H:%M:%S"
             )
 
-            results.append((alert_id, record_id, record_name, formatted_time, command))
-            print(
-                f"  [{alert_id}] {record_name} (Record {record_id}) → {command} at {formatted_time}"
-            )
+            results.append([alert_id, record_id, record_name, formatted_time, command])
 
         return results
 
@@ -191,7 +235,7 @@ class DatabaseManager:
 
     def create_alert(
         self,
-        command,
+        command_name,
         timedelta,
         start_datetime,
         record_id,
@@ -199,12 +243,13 @@ class DatabaseManager:
         record_details,
         record_location,
     ):
-        alert_command = ALERT_COMMANDS.get(command, "")
+        alert_command = ALERT_COMMANDS.get(command_name, "")
         if not alert_command:
-            log_msg(f"❌ Alert command not found for '{command}'")
+            log_msg(f"❌ Alert command not found for '{command_name}'")
             return None  # Explicitly return None if command is missing
 
-        today = date.today()
+        # today = date.today()
+        # today_fmt = today.strftime("%Y-%m-%d")
         name = record_name
         details = record_details
         location = record_location
@@ -216,17 +261,14 @@ class DatabaseManager:
         else:
             when = f"{duration_in_words(-timedelta)} ago"
 
-        start = fmt_dt(start_datetime, "datetime")
-        time = (
-            fmt_dt(start_datetime, "time")
-            if datetime.fromtimestamp(start_datetime).date() == today
-            else fmt_dt(start_datetime, "date")
-        )
-        log_msg(f"raw alert {alert_command = }")
+        start = format_datetime(start_datetime, HRS_MINS)
+        # time_fmt = start_time if start_date == today_fmt else start_date
+        time_fmt = datetime_in_words(start_datetime)
+
         alert_command = alert_command.format(
             name=name,
             when=when,
-            time=time,
+            time=time_fmt,
             details=details,
             location=location,
             start=start,
@@ -286,13 +328,15 @@ class DatabaseManager:
                 commands = [cmd.strip() for cmd in command_part.split(",")]
 
                 for td in timedelta_values:
-                    trigger_time = start_datetime - td  # When the alert should trigger
+                    trigger_datetime = (
+                        start_datetime - td
+                    )  # When the alert should trigger
 
                     # ✅ Only insert alerts that will trigger before midnight and after now
-                    if now <= trigger_time < midnight:
-                        for command in commands:
+                    if now <= trigger_datetime < midnight:
+                        for alert_name in commands:
                             alert_command = self.create_alert(
-                                command,
+                                alert_name,
                                 td,
                                 start_datetime,
                                 record_id,
@@ -303,8 +347,15 @@ class DatabaseManager:
 
                             if alert_command:  # ✅ Ensure it's valid before inserting
                                 self.cursor.execute(
-                                    "INSERT INTO Alerts (record_id, trigger_datetime, alert_command) VALUES (?, ?, ?)",
-                                    (record_id, trigger_time, alert_command),
+                                    "INSERT INTO Alerts (record_id, record_name, trigger_datetime, start_datetime, alert_name, alert_command) VALUES (?, ?, ?, ?, ?, ?)",
+                                    (
+                                        record_id,
+                                        record_name,
+                                        trigger_datetime,
+                                        start_datetime,
+                                        alert_name,
+                                        alert_command,
+                                    ),
                                 )
 
         self.conn.commit()

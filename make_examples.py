@@ -16,12 +16,25 @@ ONEDAY = timedelta(days=1)
 # in_one_hour = (
 #     datetime.now().replace(second=0, microsecond=0) + timedelta(hours=1)
 # ).strftime("%Y%m%dT%H%M00")
+def in_ten_minutes():
+    now = datetime.now().replace(second=0, microsecond=0)
+    delta_minutes = 10 + (10 - now.minute % 10)
+    next = now + timedelta(minutes=delta_minutes)
+    return next.strftime("%Y%m%dT%H%M%S")
+
+
 def in_one_hour():
-    now = datetime.now()
-    minutes = math.ceil(now.minute / 15) * 15
-    return (
-        now.replace(minute=minutes, second=0, microsecond=0) + timedelta(hours=1)
-    ).strftime("%Y%m%dT%H%M00")
+    now = datetime.now().replace(second=0, microsecond=0)
+    delta_minutes = 60 + (15 - now.minute % 15)
+    next = now + timedelta(minutes=delta_minutes)
+    return next.strftime("%Y%m%dT%H%M%S")
+
+
+def in_one_day():
+    now = datetime.now().replace(second=0, microsecond=0)
+    delta_minutes = 60 + (15 - now.minute % 15)
+    next = now + timedelta(days=1, minutes=delta_minutes)
+    return next.strftime("%Y%m%dT%H%M%S")
 
 
 def local_dtstr_to_utc_str(local_dt_str: str) -> str:
@@ -39,7 +52,8 @@ def local_dtstr_to_utc_str(local_dt_str: str) -> str:
 
     local_dt = parser.parse(local_dt_str).astimezone()
     utc_dt = local_dt.astimezone(tz=gettz("UTC")).replace(tzinfo=None)
-    return utc_dt.isoformat()
+    # return utc_dt.isoformat()
+    return utc_dt.strftime("%Y%m%dT%H%M%S")
 
 
 def week(dt: datetime) -> Union[datetime, datetime]:
@@ -131,11 +145,27 @@ records = [
     ("*", "zero extent", "zero extent event", f"RDATE:{tomorrow_date}T100000", 0, ""),
     (
         "*",
-        "coming up",
+        "ten minutes",
+        "test alert event",
+        f"RDATE:{in_ten_minutes()}",
+        random.choice(duration),
+        "600, 300, 120, 60, 0, -60: d",
+    ),
+    (
+        "*",
+        "today",
         "test alert event",
         f"RDATE:{in_one_hour()}",
         random.choice(duration),
-        "3600, 3000, 2400, 1800, 1200, 600, 300: d",
+        "3600, 1800, 600, 300, 0, -300: d",
+    ),
+    (
+        "*",
+        "tomorrow",
+        "test alert event",
+        f"RDATE:{in_one_day()}",
+        random.choice(duration),
+        "3600, 1800, 600, 300, 0, -300: d",
     ),
 ]
 while len(records) < num_items:

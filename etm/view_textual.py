@@ -9,6 +9,7 @@ from rich.console import Console
 from rich.segment import Segment
 from rich.table import Table
 from rich.text import Text
+from rich.rule import Rule
 from textual.app import App, ComposeResult
 from textual.containers import Vertical
 from textual.geometry import Size
@@ -151,7 +152,7 @@ HelpText = f"""\
 [bold][{TITLE_COLOR}]ETM {VERSION}[/{TITLE_COLOR}][/bold]
 [bold][{HEADER_COLOR}]Application Keys[/{HEADER_COLOR}][/bold]
   [bold]Q[/bold]:         Quit etm
-[bold][{HEADER_COLOR}]Views[/{HEADER_COLOR}][/bold]
+[bold][{HEADER_COLOR}]View[/{HEADER_COLOR}][/bold]
   [bold]W[/bold]:           Weeks view          [bold]N[/bold]:         Next occurrences 
   [bold]F[/bold]:           Find in items       [bold]L[/bold]:         Last occurrences 
 [bold][{HEADER_COLOR}]Search Keys[/{HEADER_COLOR}][/bold]
@@ -343,7 +344,8 @@ class FullScreenList(Screen):
         super().__init__()
         if details:
             self.title = details[0]  # First line is the title
-            self.lines = details[1:]  # Remaining lines are scrollable content
+            self.header = details[1]  # First line is also the header
+            self.lines = details[2:]  # Remaining lines are scrollable content
         else:
             self.title = "Untitled"
             self.lines = []
@@ -352,7 +354,17 @@ class FullScreenList(Screen):
 
     def compose(self) -> ComposeResult:
         """Compose the layout."""
-        yield Static(self.title, id="scroll_title", classes="title-class")
+        # yield Static(self.title, id="scroll_title", classes="title-class")
+        # yield ScrollableList(self.lines, id="list")  # Using "list" as the ID
+        # yield Static(self.footer_content, id="custom_footer")
+
+        yield Static(self.title, id="scroll_title", expand=True, classes="title-class")
+        yield Static(
+            self.header, id="scroll_header", expand=True, classes="header-class"
+        )
+        yield Static(
+            Rule("", style="#fff8dc"), id="separator"
+        )  # Add a horizontal line separator
         yield ScrollableList(self.lines, id="list")  # Using "list" as the ID
         yield Static(self.footer_content, id="custom_footer")
 
@@ -373,6 +385,7 @@ class DynamicViewApp(App):
         ("left", "previous_week", ""),
         ("right", "next_week", ""),
         ("S", "take_screenshot", "Take Screenshot"),  # Add a key binding for 's'
+        ("A", "show_alerts", "Show Alerts"),  # Bind 'A' for Alerts
         ("L", "show_last", "Show Last"),  # Bind 'L' for Last Instances
         ("N", "show_next", "Show Next"),  # Bind 'N' for Next Instances
         ("F", "show_find", "Find"),  # Bind 'F' for Find
@@ -538,6 +551,17 @@ class DynamicViewApp(App):
         )
         self.mount(search_input)  # Mount the search input widget
         self.set_focus(search_input)  # Focus on the search input
+
+    def action_show_alerts(self):
+        """Show the 'Alerts' view."""
+        width = self.app.size.width
+        self.view = "alerts"
+        details = self.controller.get_active_alerts()
+        self.afill = 1 if len(details) <= 26 else 2 if len(details) <= 676 else 3
+        footer = (
+            "[bold yellow]?[/bold yellow] Help [bold yellow]/[/bold yellow] ESC Back"
+        )
+        self.push_screen(FullScreenList(details, footer))
 
     def on_input_submitted(self, event: Input.Submitted):
         """Handle submission from search or find input."""

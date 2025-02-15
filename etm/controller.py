@@ -5,6 +5,7 @@ from sre_compile import dis
 from prompt_toolkit.styles.named_colors import NAMED_COLORS
 from rich.console import Console
 from rich.table import Table
+from rich.box import HEAVY_EDGE
 from rich import style
 from rich.columns import Columns
 from rich.console import Group, group
@@ -29,7 +30,16 @@ from typing import Literal
 
 from .model import DatabaseManager
 
-from .common import log_msg, display_messages, truncate_string, wrap, format_extent
+from .common import truncate_string, format_extent
+from .shared import (
+    log_msg,
+    HRS_MINS,
+    ALERT_COMMANDS,
+    format_time_range,
+    format_timedelta,
+    format_datetime,
+    truncate_string,
+)
 
 # The overall background color of the app is #2e2e2e - set in view_textual.css
 DAY_COLOR = NAMED_COLORS["LemonChiffon"]
@@ -85,10 +95,6 @@ TYPE_TO_COLOR = {
     ">": BEGIN_COLOR,  # begin
     "!": INBOX_COLOR,  # inbox
 }
-
-# FIXME: This should be in a config file
-# HRS_MINS = "12"  # 12 or 24 - make this the default
-HRS_MINS = "24"  # 12 or 24 - make this the default
 
 
 def format_hours_mins(dt: datetime, mode: Literal["24", "12"]) -> str:
@@ -403,13 +409,78 @@ class Controller:
 
     def execute_due_alerts(self):
         records = self.db_manager.get_due_alerts()
-        # SELECT alert_id, record_id, record_name, start_datetime, timedelta, command
+        # SELECT alert_id, record_id, record_name, trigger_datetime, start_timedelta, command
         for record in records:
-            alert_id, record_id, trigger_datetime, alert_command = record
+            (
+                alert_id,
+                record_id,
+                record_name,
+                trigger_datetime,
+                start_datetime,
+                alert_command,
+            ) = record
             log_msg(f"Executing alert {alert_command = }, {trigger_datetime = }")
             self.execute_alert(alert_command)
             # need command to execute command with arguments
             self.db_manager.mark_alert_executed(alert_id)
+
+    def get_active_alerts(self, width: int = 70):
+        # now_fmt = datetime.now().strftime("%A, %B %-d %H:%M:%S")
+        alerts = self.db_manager.get_active_alerts()
+        header = "Remaining alerts for today"
+        results = [header]
+        if not alerts:
+            results.append(f" [{HEADER_COLOR}]none scheduled[/{HEADER_COLOR}]")
+            return results
+
+        table = Table(title="Remaining alerts for today", expand=True, box=HEAVY_EDGE)
+        table.add_column("row", justify="center", width=3, style="dim")
+        table.add_column("cmd", justify="center", width=3)
+        table.add_column("time", justify="left", width=24)
+        table.add_column("name", width=25, overflow="ellipsis", no_wrap=True)
+
+        # 4*2 + 2*3 + 7 + 14 = 35 => name width = width - 35
+        name_width = width - 35
+        results.append(
+            # f"{'row':^3}  {'cmd':^3}  {'time':^24}  {'name':^{name_width}}",
+            f"[bold]{'row':^3}  {'cmd':^3}  {'alert':^7}  {'event time':^14}  {'name':^{name_width}}[/bold]",
+        )
+
+        self.list_tag_to_id.setdefault("alerts", {})
+        self.afill = 1 if len(alerts) <= 26 else 2 if len(alerts) <= 676 else 3
+        indx = 0
+        tag = indx_to_tag(indx, self.afill)
+        for alert in alerts:
+            log_msg(f"Alert: {alert = }")
+            # alert_id, record_id, record_name, start_dt, td, command
+            (
+                alert_id,
+                record_id,
+                record_name,
+                trigger_datetime,
+                start_datetime,
+                alert_name,
+                alert_command,
+            ) = alert
+            tag = indx_to_tag(indx, self.afill)
+            self.list_tag_to_id["alerts"][tag] = record_id
+            indx += 1
+            trtime = format_datetime(trigger_datetime)
+            tdtime = format_timedelta(start_datetime - trigger_datetime)
+            sttime = format_datetime(start_datetime)
+            # starting = f"{format_datetime(trigger_datetime):<7} {format_timedelta(start_datetime - trigger_datetime):>4} → {format_datetime(start_datetime)}"
+            name = truncate_string(record_name, name_width)
+            row = "  ".join(
+                [
+                    f"[dim]{tag:^3}[/dim]",
+                    f"[bold yellow]{alert_name:^3}[/bold yellow]",
+                    f"[bold yellow]{trtime:<7}[/bold yellow]",
+                    f"[{EVENT_COLOR}]{tdtime:>4} → {sttime:<7}[/{EVENT_COLOR}]",
+                    f"[{AVAILABLE_COLOR}]{name:<{name_width}}[/{AVAILABLE_COLOR}]",
+                ]
+            )
+            results.append(row)
+        return results
 
     def get_record_details(self, record_id):
         """
@@ -459,6 +530,8 @@ class Controller:
             tag_to_id = self.tag_to_id[selected_week]
         elif view in ["next", "last", "find"]:
             tag_to_id = self.list_tag_to_id[view]
+        elif view == "alerts":
+            tag_to_id = self.list_tag_to_id["alerts"]
         else:
             return [
                 "Invalid view.",
@@ -654,23 +727,28 @@ class Controller:
 
             if start_dt == end_dt:
                 if start_dt.hour == 0 and start_dt.minute == 0 and start_dt.second == 0:
-                    start_end = f"{str('~'):^11}"
+                    # start_end = f"{str('~'):^11}"
+                    start_end = ""
                 elif (
                     start_dt.hour == 23
                     and start_dt.minute == 59
                     and start_dt.second == 59
                 ):
-                    start_end = f"{str('~'):^11}"
+                    # start_end = f"{str('~'):^11}"
+                    start_end = ""
                 else:
-                    start_end = f"{format_extent(start_dt, end_dt, HRS_MINS):^11}"
+                    start_end = f"{format_time_range(start_dt, end_dt, HRS_MINS)}"
             else:
-                start_end = f"{format_extent(start_dt, end_dt, HRS_MINS):^11}"
+                start_end = f"{format_time_range(start_dt, end_dt, HRS_MINS)}"
 
             type_color = TYPE_TO_COLOR[type]
-            escaped_start_end = f"[not bold]{start_end}[/not bold]"
+            escaped_start_end = (
+                f"[not bold]{start_end} [/not bold]" if start_end else ""
+            )
+
             row = [
                 id,
-                f"[{type_color}]{type} {escaped_start_end:<12}  {name}[/{type_color}]",
+                f"[{type_color}]{type} {escaped_start_end}{name}[/{type_color}]",
             ]
             weekday_to_events.setdefault(start_dt.date(), []).append(row)
 
@@ -695,14 +773,14 @@ class Controller:
             if events:
                 details.append(
                     # f" [bold][yellow]{day.strftime('%A, %B %-d')}[/yellow][/bold]"
-                    f" [not bold][{HEADER_COLOR}]{day.strftime('%a, %b %-d')}{flag}[/{HEADER_COLOR}][/not bold]"
+                    f"[not bold][{HEADER_COLOR}]{day.strftime('%a, %b %-d')}{flag}[/{HEADER_COLOR}][/not bold]"
                 )
                 for event in events:
                     event_id, event_str = event
                     # log_msg(f"{event_str = }")
                     tag = indx_to_tag(indx, self.afill)
                     self.tag_to_id[yr_wk][tag] = event_id
-                    details.append(f"  [dim]{tag}[/dim]  {event_str}")
+                    details.append(f" [dim]{tag}[/dim]   {event_str}")
                     indx += 1
         # NOTE: maybe return list for scrollable view?
         # details_str = "\n".join(details)
@@ -714,12 +792,12 @@ class Controller:
         Fetch and format details for the next instances.
         """
         events = self.db_manager.get_next_instances()
-        header = f"Next instances ({len(events)})"
-        # details = [f"[not bold][{HEADER_COLOR}]{header}[/{HEADER_COLOR}][/not bold]"]
+        header = f"next instances ({len(events)})"
+        # details = [f"[not bold][{header_color}]{header}[/{header_color}][/not bold]"]
         details = [header]
 
         if not events:
-            details.append(f" [{HEADER_COLOR}]Nothing found[/{HEADER_COLOR}]")
+            details.append(f" [{header_color}]nothing found[/{header_color}]")
             # return "\n".join(details)
             return details
 
