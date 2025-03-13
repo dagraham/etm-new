@@ -324,8 +324,9 @@ class WeeksScreen(Screen):
 
     def compose(self) -> ComposeResult:
         # Display the table
-        yield Static(self.table_title, id="table_title", classes="title-class")
-        yield Static(self.table, id="table", classes="weeks-table")
+        if self.table_title and self.table:
+            yield Static(self.table_title, id="table_title", classes="title-class")
+            yield Static(self.table, id="table", classes="weeks-table")
 
         # Display the title and scrollable list
         yield Static(self.list_title, id="list_title", classes="title-class")
@@ -385,7 +386,7 @@ class DynamicViewApp(App):
         ("left", "previous_week", ""),
         ("right", "next_week", ""),
         ("S", "take_screenshot", "Take Screenshot"),  # Add a key binding for 's'
-        ("A", "show_alerts", "Show Alerts"),  # Bind 'A' for Alerts
+        ("A", "show_alerts", "Show Alerts"),  # Bind 'A' for Agenda
         ("L", "show_last", "Show Last"),  # Bind 'L' for Last Instances
         ("N", "show_next", "Show Next"),  # Bind 'N' for Next Instances
         ("F", "show_find", "Find"),  # Bind 'F' for Find
@@ -545,6 +546,7 @@ class DynamicViewApp(App):
 
     def action_show_find(self):
         """Show the 'Find' view."""
+        self.view = "find"
         search_input = Input(
             placeholder="Enter search term for item name or details ...",
             id="find_input",

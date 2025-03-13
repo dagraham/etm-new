@@ -65,16 +65,19 @@ SELECTED_BACKGROUND = "#4e4e4e"
 
 BUSY_COLOR = NAMED_COLORS["YellowGreen"]
 CONF_COLOR = NAMED_COLORS["Tomato"]
-BUSY_FRAME_COLOR = "#4e4e4e"
+# BUSY_FRAME_COLOR = "#4e4e4e"
+BUSY_FRAME_COLOR = "#5d5d5d"
+# BUSY_FRAME_COLOR = "#6e6e6e"
 # BUSY_FRAME_COLOR = NAMED_COLORS["DimGrey"]
-SLOT_HOURS = [0, 4, 8, 12, 16, 20, 24]
+# SLOT_HOURS = [0, 4, 8, 12, 16, 20, 24]
+SLOT_HOURS = [0, 6, 12, 18, 24]
 SLOT_MINUTES = [x * 60 for x in SLOT_HOURS]
 BUSY = "■"  # U+25A0 this will be busy_bar busy and conflict character
 FREE = "□"  # U+25A1 this will be busy_bar free character
 ADAY = "━"  # U+2501 for all day events ━
 
-# SELECTED_COLOR = NAMED_COLORS["Yellow"]
-SELECTED_COLOR = "bold yellow"
+SELECTED_COLOR = NAMED_COLORS["Yellow"]
+# SELECTED_COLOR = "bold yellow"
 
 HEADER_COLOR = NAMED_COLORS["LemonChiffon"]
 HEADER_STYLE = f"bold {NAMED_COLORS['LemonChiffon']}"
@@ -573,9 +576,9 @@ class Controller:
         )
 
         weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-        table.add_column(f"[{DIM_COLOR}]Wk[/{DIM_COLOR}]", justify="center", width=6)
+        table.add_column(f"[{DIM_COLOR}]Wk[/{DIM_COLOR}]", justify="center", width=4)
         for day in weekdays:
-            table.add_column(day, justify="center", style=DAY_COLOR, width=10, ratio=1)
+            table.add_column(day, justify="center", style=DAY_COLOR, width=6, ratio=1)
 
         self.rownum_to_details = {}  # Reset for this period
         current_date = start_date
@@ -617,16 +620,18 @@ class Controller:
 
                 mday = monthday_str
                 if today:
-                    mday = f"[bold][{TODAY_COLOR}]{monthday_str}[/{TODAY_COLOR}][/bold]"
+                    mday = (
+                        f"[bold][{TODAY_COLOR}]{monthday_str:>2}[/{TODAY_COLOR}][/bold]"
+                    )
 
                 if events:
                     tups = [event_tuple_to_minutes(ev[0], ev[1]) for ev in events]
                     aday_str, busy_str = get_busy_bar(tups)
                     # log_msg(f"{date = }, {tups = }, {busy_str = }")
                     if aday_str:
-                        row.append(f"{aday_str} {mday} {aday_str}{busy_str}")
+                        row.append(f"{aday_str + mday + aday_str:>4}{busy_str}")
                     else:
-                        row.append(f"{mday}{busy_str}")
+                        row.append(f"{mday:>2}{busy_str}")
                 else:
                     row.append(f"{mday}\n")
 

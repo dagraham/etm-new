@@ -149,7 +149,7 @@ class DatabaseManager:
             FROM Alerts
             WHERE (trigger_datetime) BETWEEN ? AND ?
         """,
-            (now - 3, now + 3),
+            (now - 2, now + 4),
         )
 
         return self.cursor.fetchall()

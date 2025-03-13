@@ -39,7 +39,7 @@ def log_msg(msg: str, file_path: str = "log_msg.md"):
     #     width=shutil.get_terminal_size()[0] - 3,
     # )
     lines = [
-        f"- {datetime.now().strftime('%y-%m-%d %H:%M')} " + rf"({caller_name}):  ",
+        f"- {datetime.now().strftime('%y-%m-%d %H:%M:%S')} " + rf"({caller_name}):  ",
     ]
     lines.extend(
         [
