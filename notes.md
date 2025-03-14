@@ -2,9 +2,65 @@
 
 ## Refactor model and view
 
+                March 10 - April 6, 2025
+┌───────┬───────┬───────┬───────┬───────┬────────┬───────┐
+│  Mon  │  Tue  │  Wed  │  Thu  │  Fri  │  Sat   │  Sun  │
+├───────┼───────┼───────┼───────┼───────┼────────┼───────┤
+│  10   │  11   │  12   │  13   │ ━14━  │   15   │  16   │
+│ □□■■  │ □□□■  │ □□■□  │ □□□■  │ □□□■  │  □□■■  │       │
+├───────┼───────┼───────┼───────┼───────┼────────┼───────┤
+│  17   │  18   │  19   │  20   │  21   │   22   │  23   │
+│ □□□■  │ □□□■  │       │       │       │        │ ■□□□  │
+├───────┼───────┼───────┼───────┼───────┼────────┼───────┤
+│  24   │  25   │  26   │  27   │  28   │   29   │  30   │
+│       │ □■■□  │ □□□■  │ □□□■  │ ■■■□  │  □□□■  │       │
+├───────┼───────┼───────┼───────┼───────┼────────┼───────┤
+│  31   │   1   │   2   │   3   │   4   │    5   │   6   │
+│ □□□■  │ ■■□■  │ ■□□□  │       │ ■■■■  │  ■□□□  │ □□■■  │
+└───────┴───────┴───────┴───────┴───────┴────────┴───────┘
+            March 31 - April 6, 2025 #14 (12)
+Mon, Mar 31
+ a   *11:15-11:59pm Quaerat eius sed
+Tue, Apr 1
+ b* 12-12:45am Quaerat eius sed
+ c   *10:30-11am Ut adipisci velit numquam non
+ d* 11:15-11:59pm Quaerat eius sed
+Wed, Apr 2
+ e   *12-12:45am Quaerat eius sed
+Fri, Apr 4
+ f   - 3:59-6:44am Quiquia eius quaerat voluptatem
+ g   - 3:15-5:30pm Magnam amet amet
+ h* 11:45-11:59pm Dolor aliquam aliquam non
+Sat, Apr 5
+ i   *12-1:45am Dolor aliquam aliquam non
+Sun, Apr 6
+ j* 2:15-3:15pm Non dolor ut
+ k   *4:45-6:15pm Sed dolorem quaerat
+ l* 8:30pm Consectetur amet numquam numquam dolore
 refresh_display
 
+                       Mar 10 - 16, 2025 #11                         ^
+ Mon Mar 10
 
+* 8-9:30a pickleball ↻
+* 11-11:15a Sationary Bike ↻
+* 1:30p Sonia - cleaners ↻
+ Tue Mar 11
+* 7-7:01a pickleball reservations ↻
+* 11-11:15a Sationary Bike ↻
+ Wed Mar 12
+* 11-11:15a Sationary Bike ↻
+* 1p Ellen MJ ↻
+
+* Replace refrigerator water filter ↻
+ Thu Mar 13 (Today)
+
+* 8-9:30a pickleball ↻
+* 11-11:15a Sationary Bike ↻
+* 12-2p Lunch at Washington Duke with John, Mike...
+
+* 5p Meds ↻
+  < -40  Replace Waterdrop under sink filter (1) ↻
 
 ## Scratch Pad
 
@@ -15,7 +71,7 @@ Think of the slot 1 as the tuple (0, 240), slot 2 as (240, 480), etc.
 Now suppose I have an event (b, e) = (100, 200). Slot 1 should be busy for this event and all the other slots should be free. With (b, e) = (100, 240) this should still be true. But with (b, e) = (100, 241) slot 2 should be busy as well. With (b, e) = (240, 720), slots 2 and 3 should be busy.
 
 How can I do this?
- 
+
 ## Week-based views
 
 ### Why week based views
@@ -63,14 +119,14 @@ The switch from "monthly" to "weekly" has pros and cons:
 
 Pros:
 
-- Fully utilizes available table cells.
-- Emphasizes the natural association between rows and weeks. In "weekly" March, e.g., the first row is associated with week number 9 of 2025, Feb 24 - Apr 2 so selecting that row can automatically display the list of items scheduled for that week. What is the association for the first row of "monthly" March? To March 1 and 2 and just the items scheduled for those two days?
-- Allows scrolling by a week at a time. It's always possible to see a week in the context of the surrounding weeks, both before and after. With a "monthly" view, the only way to scroll is by a month and, for the first and last weeks of a month, this means no way of seeing the week in the context of the surrounding weeks.
-- Allows smooth display transitions. The display will not jump when scrolling from period to period because the same number of rows are always required for the display.
+* Fully utilizes available table cells.
+* Emphasizes the natural association between rows and weeks. In "weekly" March, e.g., the first row is associated with week number 9 of 2025, Feb 24 - Apr 2 so selecting that row can automatically display the list of items scheduled for that week. What is the association for the first row of "monthly" March? To March 1 and 2 and just the items scheduled for those two days?
+* Allows scrolling by a week at a time. It's always possible to see a week in the context of the surrounding weeks, both before and after. With a "monthly" view, the only way to scroll is by a month and, for the first and last weeks of a month, this means no way of seeing the week in the context of the surrounding weeks.
+* Allows smooth display transitions. The display will not jump when scrolling from period to period because the same number of rows are always required for the display.
 
 Cons:
 
-- The title of the table becomes more complicated. Instead of just the month and year, the dates of the first and last days are needed.
+* The title of the table becomes more complicated. Instead of just the month and year, the dates of the first and last days are needed.
 
 I think it comes down to this. If the necessity of having a grid with 7 columns corresponding to the weekdays is accepted,
 then the only question is how many rows. If only showing a month is required, then the number of rows will depend up the month, many cells in the table will be empty and scrolling will be limited to a month at a time. If the "only a month" requirement is relaxed, then the number of rows can be fixed, the grid will always be full and scrolling can be by a week at a time.
@@ -83,9 +139,9 @@ ETM has always been focused on week views
 
 ## Pastdue tasks
 
-- [ ] All instances listed together by #task and #date with tasks sorted by the date of the first instances
-- [ ] Past due list as an appendage to details of the current date or as a separate list. Better separate list.
-- [ ] #Beginbys with details of the current date
+* [ ] All instances listed together by #task and #date with tasks sorted by the date of the first instances
+* [ ] Past due list as an appendage to details of the current date or as a separate list. Better separate list.
+* [ ] #Beginbys with details of the current date
 
 ```python
 type_to_color = {
