@@ -44,7 +44,7 @@ from jinja2 import __version__ as jinja2_version
 from prompt_toolkit import __version__ as prompt_toolkit_version
 
 from time import perf_counter as timer
-from etm.make_examples import make_examples
+# from etm.make_examples import make_examples
 
 ETMDB = DBITEM = DBARCH = dataview = data_changed = None
 
@@ -437,47 +437,47 @@ def import_file(import_file=None):
         )
 
 
-def import_examples():
-    docs = []
-    examples = make_examples(last_id=last_id)
-
-    results = []
-    good = []
-    bad = []
-    items = []
-
-    logger.debug(f"starting import from last_id: {last_id}")
-    count = 0
-    for s in examples:
-        ok = True
-        count += 1
-        if not s:
-            continue
-        item = Item()  # use ETMDB by default
-        item.new_item()
-        item.text_changed(s, 1)
-        if item.item_hsh.get("itemtype", None) is None:
-            ok = False
-
-        if item.item_hsh.get("summary", None) is None:
-            ok = False
-
-        if ok:
-            # don't check links because the ids won't yet exist
-            item.update_item_hsh(check_links=False)
-            good.append(f"{item.doc_id}")
-        else:
-            logger.debug(f"bad entry: {s}")
-            bad.append(s)
-
-    logger.debug("ending import")
-    res = f"imported {len(good)} items"
-    if good:
-        res += f"\n  ids: {good[0]} - {good[-1]}"
-    if bad:
-        res += f"\nrejected {bad} items:\n  "
-        res += "\n  ".join(results)
-    return res
+# def import_examples():
+#     docs = []
+#     examples = make_examples(last_id=last_id)
+#
+#     results = []
+#     good = []
+#     bad = []
+#     items = []
+#
+#     logger.debug(f"starting import from last_id: {last_id}")
+#     count = 0
+#     for s in examples:
+#         ok = True
+#         count += 1
+#         if not s:
+#             continue
+#         item = Item()  # use ETMDB by default
+#         item.new_item()
+#         item.text_changed(s, 1)
+#         if item.item_hsh.get("itemtype", None) is None:
+#             ok = False
+#
+#         if item.item_hsh.get("summary", None) is None:
+#             ok = False
+#
+#         if ok:
+#             # don't check links because the ids won't yet exist
+#             item.update_item_hsh(check_links=False)
+#             good.append(f"{item.doc_id}")
+#         else:
+#             logger.debug(f"bad entry: {s}")
+#             bad.append(s)
+#
+#     logger.debug("ending import")
+#     res = f"imported {len(good)} items"
+#     if good:
+#         res += f"\n  ids: {good[0]} - {good[-1]}"
+#     if bad:
+#         res += f"\nrejected {bad} items:\n  "
+#         res += "\n  ".join(results)
+#     return res
 
 
 def import_text(import_file=None):

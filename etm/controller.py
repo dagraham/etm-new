@@ -540,9 +540,10 @@ class Controller:
                 "Invalid view.",
             ]
 
-        details = [f"Tag [{SELECTED_COLOR}]{tag}[/{SELECTED_COLOR}] details"]
+        # details = [f"Tag [{SELECTED_COLOR}]{tag}[/{SELECTED_COLOR}] details"]
         if tag in tag_to_id:
             record_id = tag_to_id[tag]
+            details = [f"Details for [{SELECTED_COLOR}]{record_id}[/{SELECTED_COLOR}]"]
             # log_msg(f"Tag '{tag}' corresponds to record ID {record_id}")
             # details = self.get_record_details_as_string(record_id)
             fields = self.get_record_details(record_id)
@@ -576,7 +577,7 @@ class Controller:
         )
 
         weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-        table.add_column(f"[{DIM_COLOR}]Wk[/{DIM_COLOR}]", justify="center", width=4)
+        # table.add_column(f"[{DIM_COLOR}]Wk[/{DIM_COLOR}]", justify="center", width=3)
         for day in weekdays:
             table.add_column(day, justify="center", style=DAY_COLOR, width=6, ratio=1)
 
@@ -594,11 +595,14 @@ class Controller:
             self.rownum_to_yrwk[row_num] = yr_wk
             # row = [f"[{DIM_COLOR}]{row_num}[{DIM_COLOR}]\n"]
             SELECTED = yr_wk == selected_week
-            row = (
-                [f"[{SELECTED_COLOR}]{row_num}[/{SELECTED_COLOR}]\n"]
-                if SELECTED
-                else [f"[{DIM_COLOR}]{row_num}[{DIM_COLOR}]\n"]
-            )
+            # row = (
+            #     [f"[{SELECTED_COLOR}]{row_num}[/{SELECTED_COLOR}]\n"]
+            #     if SELECTED
+            #     else [f"[{DIM_COLOR}]{row_num}[{DIM_COLOR}]\n"]
+            # )
+            # row = [f"[{DIM_COLOR}]{row_num}[{DIM_COLOR}]\n"]
+            row = []
+
             for weekday in range(1, 8):  # ISO weekdays: 1 = Monday, 7 = Sunday
                 date = datetime.strptime(f"{iso_year} {iso_week} {weekday}", "%G %V %u")
                 monthday_str = date.strftime(
@@ -637,6 +641,15 @@ class Controller:
                     row.append(f"{mday}\n")
 
                 if SELECTED:
+                    # row = [
+                    #     f"[{SELECTED_COLOR}]{cell}[/{SELECTED_COLOR}]" for cell in row
+                    # ]
+                    # row = [
+                    #     f"[{DIM_COLOR}]{row[0]}[{DIM_COLOR}]",
+                    # ] + [
+                    #     f"[{SELECTED_COLOR}]{cell}[/{SELECTED_COLOR}]"
+                    #     for cell in row[1:]
+                    # ]
                     row = [
                         f"[{SELECTED_COLOR}]{cell}[/{SELECTED_COLOR}]" for cell in row
                     ]
@@ -706,7 +719,8 @@ class Controller:
         this_week = format_date_range(start_datetime, end_datetime - ONEDAY)
         terminal_width = shutil.get_terminal_size().columns
 
-        header = f"Items for {this_week} #{yr_wk[1]} ({len(events)})"
+        # header = f"Items for {this_week} #{yr_wk[1]} ({len(events)})"
+        header = f"{this_week} #{yr_wk[1]} ({len(events)})"
         # details = [f"[not bold][{HEADER_COLOR}]{header}[/{HEADER_COLOR}][/not bold]"]
         details = [header]
 
@@ -779,7 +793,8 @@ class Controller:
             if events:
                 details.append(
                     # f" [bold][yellow]{day.strftime('%A, %B %-d')}[/yellow][/bold]"
-                    f"[not bold][{HEADER_COLOR}]{day.strftime('%a, %b %-d')}{flag}[/{HEADER_COLOR}][/not bold]"
+                    # f"[not bold][{HEADER_COLOR}]{day.strftime('%a, %b %-d')}{flag}[/{HEADER_COLOR}][/not bold]"
+                    f"[bold][{HEADER_COLOR}]{day.strftime('%a, %b %-d')}{flag}[/{HEADER_COLOR}][/bold]"
                 )
                 for event in events:
                     event_id, event_str = event
