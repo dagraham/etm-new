@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 from etm.controller import Controller
 from etm.view_rich import FourWeekView
 from prompt_toolkit.key_binding import KeyBindings
@@ -5,9 +6,6 @@ from etm.common import log_msg, display_messages
 
 
 def main():
-    """
-    Entry point for setting up and running the FourWeekView application.
-    """
     # Initialize the database manager
     # db_manager = DatabaseManager("example.db")
 

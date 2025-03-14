@@ -618,7 +618,8 @@ class Controller:
                     and weekday == tomorrow_day
                 )
 
-                mday = monthday_str
+                mday = f"{monthday_str:>2}"
+                # mday = monthday_str
                 if today:
                     mday = (
                         f"[bold][{TODAY_COLOR}]{monthday_str:>2}[/{TODAY_COLOR}][/bold]"

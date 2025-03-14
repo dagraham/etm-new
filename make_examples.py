@@ -70,7 +70,7 @@ num_items = 400
 types = ["-", "*"]
 
 locations = ["errands", "home", "office", "shop"]
-tags = ["red", "green", "blue"]
+# tags = ["red", "green", "blue"]
 dates = [0, 0, 0, 1, 0, 0, 0]  # dates 1/7 of the time
 repeat = [0, 0, 0, 0, 1, 0, 0, 0, 0, 0]  # repeat 1/10 of the time
 duration = [x for x in range(0, 210, 15)]
@@ -123,6 +123,7 @@ def word():
 freq = [
     "FREQ=WEEKLY;INTERVAL=1",
     "FREQ=WEEKLY;INTERVAL=1;BYDAY=MO,WE,FR",
+    "FREQ=MONTHLY;INTERVAL=1;BYMONTHDAY=1",
     "FREQ=WEEKLY;INTERVAL=2",
     "FREQ=DAILY",
     "FREQ=DAILY;INTERVAL=2",
@@ -132,10 +133,12 @@ freq = [
 count = [f"COUNT={n}" for n in range(2, 5)]
 
 yesterday_date = (now - ONEDAY).strftime("%Y%m%d")
+month_begin = now.replace(day=1).strftime("%Y%m%d")
 today_date = now.strftime("%Y%m%d")
 tomorrow_date = (now + ONEDAY).strftime("%Y%m%d")
 # type, name, details, rrulestr, extent, alerts, location
 records = [
+    ("*", "first of the month", "all day event", f"RDATE:{month_begin}", 0, ""),
     ("*", "all day yesterday", "all day event", f"RDATE:{yesterday_date}", 0, ""),
     ("*", "all day today", "all day event", f"RDATE:{today_date}", 0, ""),
     ("*", "all day tomorrow", "all day event", f"RDATE:{tomorrow_date}", 0, ""),
