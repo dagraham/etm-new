@@ -164,7 +164,7 @@ if new_version:
 
     ans = input("switch to main and merge working? [yN] ")
     if ans.lower() != "y":
-        print("cancelled")
+        print("cancelled switch to main and merge working")
         sys.exit()
     ok, res = check_output(
         f"git push origin && git checkout main && git merge working && git push origin && git checkout working"
@@ -173,7 +173,7 @@ if new_version:
         print(res)
         ans = input("upload sdist to PyPi using twine? [yN] ")
         if ans.lower() != "y":
-            print("cancelled")
+            print("cancelled upload sdist to PyPi")
             sys.exit()
         ok, res = check_output("./upload_sdist.sh")
         if res:
