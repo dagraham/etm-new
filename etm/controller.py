@@ -579,7 +579,13 @@ class Controller:
         weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
         # table.add_column(f"[{DIM_COLOR}]Wk[/{DIM_COLOR}]", justify="center", width=3)
         for day in weekdays:
-            table.add_column(day, justify="center", style=DAY_COLOR, width=6, ratio=1)
+            table.add_column(
+                day,
+                justify="center",
+                style=DAY_COLOR,
+                width=8,
+                ratio=1,
+            )
 
         self.rownum_to_details = {}  # Reset for this period
         current_date = start_date
