@@ -44,7 +44,7 @@ from jinja2 import __version__ as jinja2_version
 from prompt_toolkit import __version__ as prompt_toolkit_version
 
 from time import perf_counter as timer
-from etm.make_examples import make_examples
+# from etm.make_examples import make_examples
 
 ETMDB = DBITEM = DBARCH = dataview = data_changed = None
 
