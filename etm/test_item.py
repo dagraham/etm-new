@@ -189,8 +189,7 @@ def test_task_with_jobs():
 # test_repeat_from_rruleset()
 test_timedelta_string_to_seconds()
 test_do_alert()
-# test_item_entry()
+test_item_entry()
 # test_rruleset_from_item()
 # test_rrule_to_entry()
 # test_task_with_jobs()
-
