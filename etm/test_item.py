@@ -1,14 +1,18 @@
 import sys
 import os
-sys.path.append(os.path.dirname(__file__)) # for pytest
+
+sys.path.append(os.path.dirname(__file__))  # for pytest
 from item import Item
 from datetime import datetime, date, timedelta
 from dateutil.rrule import rrule, rruleset, rrulestr, DAILY
 from dateutil.tz import gettz
+from common import timedelta_string_to_seconds
+
 
 def pprint(obj):
-    line = "\n" + "-"*10 + "\n"
+    line = "\n" + "-" * 10 + "\n"
     print(line, obj.__repr__(), line)
+
 
 json_entry = {
     "created": "{T}:20240712T1052",
@@ -16,7 +20,7 @@ json_entry = {
     "subject": "Thanksgiving",
     "s": "{T}:20101126T0500",
     "r": "RRULE:FREQ=MONTHLY;BYMONTH=11;BYDAY=+4THU",
-    "modified": "{T}:20240712T1054"
+    "modified": "{T}:20240712T1054",
 }
 
 string_entry = """\
@@ -28,13 +32,14 @@ RDATE:20241105T151500
 EXDATE:20241104T133000
 """
 
+
 def test_repeat_from_rruleset():
-    pacific = gettz('US/Pacific')
-    mountain = gettz('America/Denver')
-    central = gettz('US/Central')
-    eastern = gettz('America/New_York')
+    pacific = gettz("US/Pacific")
+    mountain = gettz("America/Denver")
+    central = gettz("US/Central")
+    eastern = gettz("America/New_York")
     local = gettz()
-    utc = gettz('UTC')
+    utc = gettz("UTC")
     naive = None
 
     tz = None
@@ -58,12 +63,17 @@ def test_repeat_from_rruleset():
     rules.rrule(rule2)
 
     # Add a specific date to include
-    plusdates = [datetime(2024, 11, 4, 13, 45, tzinfo=tz), datetime(2024, 11, 5, 15, 15, tzinfo=tz)]
+    plusdates = [
+        datetime(2024, 11, 4, 13, 45, tzinfo=tz),
+        datetime(2024, 11, 5, 15, 15, tzinfo=tz),
+    ]
     for dt in plusdates:
         rules.rdate(dt)
         rules_lst.append(dt.strftime("RDATE:%Y%m%dT%H%M%S"))
     # Add a specific date to exclude
-    minusdates = [datetime(2024, 11, 4, 13, 30, tzinfo=tz),]
+    minusdates = [
+        datetime(2024, 11, 4, 13, 30, tzinfo=tz),
+    ]
     for dt in minusdates:
         rules.exdate(dt)
         rules_lst.append(dt.strftime("EXDATE:%Y%m%dT%H%M%S"))
@@ -80,7 +90,9 @@ def test_repeat_from_rruleset():
         print(occurrence.strftime("  %a %Y-%m-%d %H:%M %Z %z"))
 
 
-line = "\n" + "-"*10 + "\n"
+line = "\n" + "-" * 10 + "\n"
+
+
 def test_item_entry():
     item = Item()
     partial_strings = [
@@ -104,7 +116,7 @@ def test_item_entry():
 
     # FIXME: duplicates in rrule_tokens
 
-    line = "\n" + "-"*10 + "\n"
+    line = "\n" + "-" * 10 + "\n"
     print("\nparsing partial_strings")
     for s in partial_strings:
         print(f"\nprocessing: {s}")
@@ -118,13 +130,31 @@ def test_item_entry():
     pprint(item.item)
     print()
 
+
+def test_timedelta_string_to_seconds():
+    print(
+        f"timedelta_string_to_seconds({'90m'}) = {timedelta_string_to_seconds('90m')}"
+    )
+
+
+def test_do_alert():
+    item = Item()
+    item.parse_input(
+        "- with alerts @s 2025-03-14 4pm @e 90m @a 30m, 15m, 0m, -1h: d, c, e @d testing alert"
+    )
+    pprint(item.item)
+
+
 def test_rruleset_from_item():
     item = Item()
-    item.parse_input("* rdates and exdates @s 2024-08-07 4p @r w &i 2 &w WE @r w &w MO @+ 2024-08-09 2p, 2024-08-16 2p @- 2024-08-21 4p")
+    item.parse_input(
+        "* rdates and exdates @s 2024-08-07 4p @r w &i 2 &w WE @r w &w MO @+ 2024-08-09 2p, 2024-08-16 2p @- 2024-08-21 4p"
+    )
     # if item.rrule_tokens:
     #     success, rruleset_str = item.finalize_rruleset()
     #     print(f"\n{success = } for:\n'{item.entry}'{line}{rruleset_str}{line}" )
     pprint(item.item)
+
 
 def test_rrule_to_entry():
     item = Item()
@@ -141,6 +171,7 @@ def test_rrule_to_entry():
     # print(f"resulting rruleset:{line}{rruleset_str}{line}")
     # print(f"back to the @r entry:{line}{output_str}{line}")
 
+
 def test_task_with_jobs():
     item = Item()
     input_str = "- task with jobs @s 2024-08-07 4:00pm @j alpha &s 5d &d whatever @j beta &d more of the same &p 1 @j gamma plus &p 1 &d last one"
@@ -154,8 +185,12 @@ def test_task_with_jobs():
 
     pprint(item.item)
 
+
 # test_repeat_from_rruleset()
-test_item_entry()
-test_rruleset_from_item()
-test_rrule_to_entry()
-test_task_with_jobs()
+test_timedelta_string_to_seconds()
+test_do_alert()
+# test_item_entry()
+# test_rruleset_from_item()
+# test_rrule_to_entry()
+# test_task_with_jobs()
+
