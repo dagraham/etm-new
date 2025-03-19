@@ -249,6 +249,7 @@ class Item:
             "do_summary",
         ],
         "s": ["scheduled", "starting date or datetime", "do_datetime"],
+        "t": ["tag", "tag name", "do_string"],
         "r": ["recurrence", "recurrence rule", "do_rrule"],
         "j": ["job", "job entry", "do_job"],
         "+": ["rdate", "recurrence dates", "do_rdate"],
@@ -285,10 +286,6 @@ class Item:
             "priority from 0 (none) to 4 (urgent)",
             "do_priority",
         ],
-        "q": ["quota", "number of instances to be done", "do_quota"],
-        "t": ["tag", "tag", "do_string"],
-        "u": ["used time", "timeperiod: datetime", "do_usedtime"],
-        "x": ["expansion", "expansion key", "do_string"],
         "z": [
             "timezone",
             "a timezone entry such as 'US/Eastern' or 'Europe/Paris' or 'float' to specify a naive/floating datetime",
@@ -396,35 +393,6 @@ class Item:
         self.exdates = []
         self.dtstart = None
 
-    def get_weekly_rows(self):
-        views_and_rows = {}
-
-        # Example logic for adding to agenda view if there is an event date
-        if self.start:
-            YrWk = self.item_date.isocalendar()[:2]
-        elif self.completion_date:
-            YrWk = self.completion_date.isocalendar()[:2]
-        else:
-            YrWk = None
-
-        if self.item_type == "event":
-            if self.item_date:
-                views_and_rows[(YrWk, "agenda")] = [(self.item_date, self.name)]
-
-        # Example logic for adding to tasks view if there is a due date and it's not completed
-        # Example logic for adding to completed view if it is completed
-        elif self.item_type == "task":
-            if self.completion_date:
-                views_and_rows[(YrWk, "agenda")] = [(self.completion_date, self.name)]
-            elif self.item_date:
-                views_and_rows[(YrWk, "agenda")] = [(self.item_date, self.name)]
-            else:
-                views_and_rows["tasks"] = [(None, self.name)]
-
-        # Add other views and logic as needed based on the properties of the item
-        # print(f"{views_and_rows = }")
-        return views_and_rows
-
     def parse_input(self, entry: str):
         """
         Parses the input string to extract tokens, then processes and validates the tokens.
@@ -446,114 +414,6 @@ class Item:
             print(f"\n{success = } for:\n'{self.entry}'")
             for job in jobs:
                 print(job)
-
-    def parse_duration(self, token: str) -> timedelta:
-        """\
-        Take a period string and return a corresponding timedelta.
-        Examples:
-            parse_duration('-2w3d4h5m')= Duration(weeks=-2,days=3,hours=4,minutes=5)
-            parse_duration('1h30m') = Duration(hours=1, minutes=30)
-            parse_duration('-10m') = Duration(minutes=10)
-        where:
-            y: years
-            w: weeks
-            d: days
-            h: hours
-            m: minutes
-            s: seconds
-        """
-
-        knms = {
-            "w": "weeks",
-            "week": "weeks",
-            "weeks": "weeks",
-            "d": "days",
-            "day": "days",
-            "days": "days",
-            "h": "hours",
-            "hour": "hours",
-            "hours": "hours",
-            "m": "minutes",
-            "minute": "minutes",
-            "minutes": "minutes",
-            "s": "seconds",
-            "second": "second",
-            "seconds": "seconds",
-        }
-
-        kwds = {
-            "weeks": 0,
-            "days": 0,
-            "hours": 0,
-            "minutes": 0,
-            "seconds": 0,
-        }
-
-        period_regex = re.compile(r"(([+-]?)(\d+)([wdhms]))+?")
-        m = period_regex.findall(str(token))
-        if not m:
-            m = expanded_period_regex.findall(str(token))
-            if not m:
-                return False, f"Invalid period string '{token}'"
-        for g in m:
-            if g[3] not in knms:
-                return False, f"invalid period argument: {g[3]}"
-
-            num = -int(g[2]) if g[1] == "-" else int(g[2])
-            if num:
-                kwds[knms[g[3]]] = num
-        td = timedelta(**kwds)
-
-        return True, td
-
-    def format_duration(self, obj: timedelta, short=False):
-        """
-        if short report only biggest 2, else all
-        >>> td = timedelta(weeks=1, days=2, hours=3, minutes=27)
-        >>> format_duration(td)
-        '1w2d3h27m'
-        """
-        # TODO: remove weeks? remove short?
-        # if not (isinstance(obj, Period) or isinstance(obj, timedelta)):
-        if not isinstance(obj, timedelta):
-            return None
-        total_seconds = int(obj.total_seconds())
-        if total_seconds == 0:
-            return " 0m"
-        sign = "+" if total_seconds > 0 else "-"
-        total_seconds = abs(total_seconds)
-        try:
-            until = []
-            weeks = days = hours = minutes = 0
-            if total_seconds:
-                seconds = total_seconds % 60
-                minutes = total_seconds // 60
-                if minutes >= 60:
-                    hours = minutes // 60
-                    minutes = minutes % 60
-                if hours >= 24:
-                    days = hours // 24
-                    hours = hours % 24
-                if days >= 7:
-                    weeks = days // 7
-                    days = days % 7
-            if weeks:
-                until.append(f"{weeks}w")
-            if days:
-                until.append(f"{days}d")
-            if hours:
-                until.append(f"{hours}h")
-            if minutes:
-                until.append(f"{minutes}m")
-            if seconds:
-                until.append(f"{seconds}s")
-            if not until:
-                until.append("0m")
-            ret = "".join(until[:2]) if short else "".join(until)
-            return sign + ret
-        except Exception as e:
-            logger.error(f"{obj}: {e}")
-            return ""
 
     def _tokenize(self, entry: str):
         self.entry = entry
@@ -808,20 +668,6 @@ class Item:
         else:
             return False, rep, []
 
-    # @classmethod
-    # def do_extent(cls, arg):
-    #     """
-    #     Process extent token
-    #     """
-    #     extent = arg.strip()
-    #     if not extent:
-    #         return False, "missing extent", []
-    #     obj, rep = cls.do_duration(extent)
-    #     if obj:
-    #         return True, obj, []
-    #     else:
-    #         return False, rep, []
-
     def do_extent(self, token):
         # Process datetime token
         extent = re.sub("^@. ", "", token.strip())
@@ -936,6 +782,8 @@ class Item:
         print(f"do_job {parts = }")
         if len(parts) < 1:
             return False, f"Missing job subject: {token}", []
+        print(f"job parts = {parts}")
+
         job_params = {"j": " ".join(parts[0][1:])}
 
         for part in parts[1:]:
@@ -1353,67 +1201,67 @@ class Item:
         return True, jobs
 
 
-class ItemManager:
-    def __init__(self):
-        self.doc_view_data = {}  # Primary structure: dict[doc_id, dict[view, list[row]]]
-        self.view_doc_data = defaultdict(
-            lambda: defaultdict(list)
-        )  # Secondary index: dict[view, dict[doc_id, list[row]])
-        self.view_cache = {}  # Cache for views
-        self.doc_view_contribution = defaultdict(
-            set
-        )  # Tracks views each doc_id contributes to
-
-    def add_or_update_item(self, item):
-        doc_id = item.doc_id
-        new_views_and_rows = item.get_weekly_rows()
-
-        # Invalidate cache for views that will be affected by this doc_id
-        self.invalidate_cache_for_doc(doc_id)
-
-        # Update the primary structure
-        self.doc_view_data[doc_id] = new_views_and_rows
-
-        # Update the secondary index
-        for view, rows in new_views_and_rows.items():
-            self.view_doc_data[view][doc_id] = rows
-            self.doc_view_contribution[doc_id].add(view)
-
-    def get_view_data(self, view):
-        # Check if the view is in the cache
-        if view in self.view_cache:
-            return self.view_cache[view]
-
-        # Retrieve data for a specific view
-        view_data = dict(self.view_doc_data[view])
-
-        # Cache the view data
-        self.view_cache[view] = view_data
-        return view_data
-
-    def get_reminder_data(self, doc_id):
-        # Retrieve data for a specific reminder
-        return self.doc_view_data.get(doc_id, {})
-
-    def remove_item(self, doc_id):
-        # Invalidate cache for views that will be affected by this doc_id
-        self.invalidate_cache_for_doc(doc_id)
-
-        # Remove reminder from primary structure
-        if doc_id in self.doc_view_data:
-            views_and_rows = self.doc_view_data.pop(doc_id)
-            # Remove from secondary index
-            for view in views_and_rows:
-                if doc_id in self.view_doc_data[view]:
-                    del self.view_doc_data[view][doc_id]
-
-            # Remove doc_id from contribution tracking
-            if doc_id in self.doc_view_contribution:
-                del self.doc_view_contribution[doc_id]
-
-    def invalidate_cache_for_doc(self, doc_id):
-        # Invalidate cache entries for views affected by this doc_id
-        if doc_id in self.doc_view_contribution:
-            for view in self.doc_view_contribution[doc_id]:
-                if view in self.view_cache:
-                    del self.view_cache[view]
+# class ItemManager:
+#     def __init__(self):
+#         self.doc_view_data = {}  # Primary structure: dict[doc_id, dict[view, list[row]]]
+#         self.view_doc_data = defaultdict(
+#             lambda: defaultdict(list)
+#         )  # Secondary index: dict[view, dict[doc_id, list[row]])
+#         self.view_cache = {}  # Cache for views
+#         self.doc_view_contribution = defaultdict(
+#             set
+#         )  # Tracks views each doc_id contributes to
+#
+#     def add_or_update_item(self, item):
+#         doc_id = item.doc_id
+#         new_views_and_rows = item.get_weekly_rows()
+#
+#         # Invalidate cache for views that will be affected by this doc_id
+#         self.invalidate_cache_for_doc(doc_id)
+#
+#         # Update the primary structure
+#         self.doc_view_data[doc_id] = new_views_and_rows
+#
+#         # Update the secondary index
+#         for view, rows in new_views_and_rows.items():
+#             self.view_doc_data[view][doc_id] = rows
+#             self.doc_view_contribution[doc_id].add(view)
+#
+#     def get_view_data(self, view):
+#         # Check if the view is in the cache
+#         if view in self.view_cache:
+#             return self.view_cache[view]
+#
+#         # Retrieve data for a specific view
+#         view_data = dict(self.view_doc_data[view])
+#
+#         # Cache the view data
+#         self.view_cache[view] = view_data
+#         return view_data
+#
+#     def get_reminder_data(self, doc_id):
+#         # Retrieve data for a specific reminder
+#         return self.doc_view_data.get(doc_id, {})
+#
+#     def remove_item(self, doc_id):
+#         # Invalidate cache for views that will be affected by this doc_id
+#         self.invalidate_cache_for_doc(doc_id)
+#
+#         # Remove reminder from primary structure
+#         if doc_id in self.doc_view_data:
+#             views_and_rows = self.doc_view_data.pop(doc_id)
+#             # Remove from secondary index
+#             for view in views_and_rows:
+#                 if doc_id in self.view_doc_data[view]:
+#                     del self.view_doc_data[view][doc_id]
+#
+#             # Remove doc_id from contribution tracking
+#             if doc_id in self.doc_view_contribution:
+#                 del self.doc_view_contribution[doc_id]
+#
+#     def invalidate_cache_for_doc(self, doc_id):
+#         # Invalidate cache entries for views affected by this doc_id
+#         if doc_id in self.doc_view_contribution:
+#             for view in self.doc_view_contribution[doc_id]:
+#                 if view in self.view_cache:
+#                     del self.view_cache[view]

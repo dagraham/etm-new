@@ -174,7 +174,10 @@ def test_rrule_to_entry():
 
 def test_task_with_jobs():
     item = Item()
-    input_str = "- task with jobs @s 2024-08-07 4:00pm @j alpha &s 5d &d whatever @j beta &d more of the same &p 1 @j gamma plus &p 1 &d last one"
+    input_str = """- task with jobs @s 2024-08-07 4:00pm @t job
+        @j alpha one &s 5d &d whatever 
+        @j beta two &d more of the same &p 1 
+        @j gamma three  &p 1 &d last one"""
 
     item.parse_input(input_str)
     if item.job_tokens:
@@ -189,7 +192,7 @@ def test_task_with_jobs():
 # test_repeat_from_rruleset()
 test_timedelta_string_to_seconds()
 test_do_alert()
-test_item_entry()
+# test_item_entry()
 # test_rruleset_from_item()
 # test_rrule_to_entry()
-# test_task_with_jobs()
+test_task_with_jobs()
