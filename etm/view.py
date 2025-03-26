@@ -432,13 +432,6 @@ class DynamicViewApp(App):
                 self.digit_buffer.clear()
                 self.action_show_details(base26_tag)
 
-    # def on_mount(self):
-    #     """Initial layout for the default view (Weeks)."""
-    #     # Fetch the default table and details for the Weeks view
-    #     self.action_show_weeks()
-    #     """Start periodic alert checking when the app starts."""
-    #     self.set_interval(6, self.check_alerts)
-
     async def on_mount(self):
         """Start periodic alert checking aligned to 6-second intervals."""
         self.action_show_weeks()

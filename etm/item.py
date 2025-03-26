@@ -14,6 +14,9 @@ from typing import Union, Tuple, Optional
 from typing import List, Dict, Any, Callable, Mapping
 from common import timedelta_string_to_seconds
 
+# JOB_PATTERN = re.compile(r"(^@j) (\d*):\s*(.*)")
+# JOB_PATTERN = re.compile(r"^@j ( +)(\S.*)")
+JOB_PATTERN = re.compile(r"^@j ( *)([^&]*)(?:(&.*))?")
 LETTER_SET = set("abcdefghijklmnopqrstuvwxyz")  # Define once
 
 
@@ -249,7 +252,7 @@ class Item:
             "do_summary",
         ],
         "s": ["scheduled", "starting date or datetime", "do_datetime"],
-        "t": ["tag", "tag name", "do_string"],
+        "t": ["tag", "tag name", "do_tag"],
         "r": ["recurrence", "recurrence rule", "do_rrule"],
         "j": ["job", "job entry", "do_job"],
         "+": ["rdate", "recurrence dates", "do_rdate"],
@@ -389,6 +392,7 @@ class Item:
         self.token_store = None
         self.rrules = []
         self.jobs = []
+        self.tags = []
         self.rdates = []
         self.exdates = []
         self.dtstart = None
@@ -414,6 +418,9 @@ class Item:
             print(f"\n{success = } for:\n'{self.entry}'")
             for job in jobs:
                 print(job)
+        if self.tags:
+            print(f"\n{success = } for:\n'{self.entry}'")
+            print(f"tags: {', '.join(self.tags)}")
 
     def _tokenize(self, entry: str):
         self.entry = entry
@@ -435,6 +442,7 @@ class Item:
         matches = re.finditer(pattern, entry)
         tokens_with_positions = []
         for match in matches:
+            print(f"{match = }")
             # Get the matched token
             token = match.group(0)
             # Get the start and end positions
@@ -584,6 +592,18 @@ class Item:
         # Overall validation logic if needed
         pass
 
+    def _extract_job_node_and_summary(self, text):
+        match = JOB_PATTERN.match(text)
+        if match:
+            number = len(match.group(1)) // 2
+            summary = match.group(2).rstrip()
+            content = match.group(3)
+            if content:
+                # the leading space is needed for parsing
+                content = f" {content}"
+            return number, summary, content
+        return None, text  # If no match, return None for number and the entire string
+
     @classmethod
     def do_itemtype(cls, token):
         # Process item type token
@@ -679,6 +699,16 @@ class Item:
         else:
             return False, extent_obj, []
 
+    def do_tag(self, token):
+        # Process datetime token
+
+        obj, rep, parts = self.do_string(token)
+        if obj:
+            self.tags.append(obj)
+            return True, obj, []
+        else:
+            return False, rep, []
+
     @classmethod
     def do_paragraph(cls, arg):
         """
@@ -738,6 +768,15 @@ class Item:
             rep = ", ".join(rep_lst)
         return obj, rep
 
+    def do_string(self, token):
+        try:
+            obj = re.sub("^@. ", "", token.strip())
+            rep = obj
+        except:
+            obj = None
+            rep = f"invalid: {token}"
+        return obj, rep, []
+
     def do_datetime(self, token):
         # Process datetime token
         print(f"Processing datetime token: {token}")
@@ -778,20 +817,25 @@ class Item:
     def do_job(self, token):
         # Process journal token
         print(f"Processing job token: {token}")
-        parts = self._sub_tokenize(token)
+        node, summary, tokens_remaining = self._extract_job_node_and_summary(token)
+        print(f"{node = }; {summary = }; {tokens_remaining = }")
+        parts = self._sub_tokenize(tokens_remaining)
         print(f"do_job {parts = }")
-        if len(parts) < 1:
-            return False, f"Missing job subject: {token}", []
+        # if len(parts) < 1:
+        #     return False, f"Missing job subject: {token}", []
         print(f"job parts = {parts}")
 
-        job_params = {"j": " ".join(parts[0][1:])}
+        job_params = {"j": summary}
 
-        for part in parts[1:]:
+        for part in parts:
+            print(f"processing part: {part}")
             key, *value = part
             print(f"processing key: {key}, value: {value}")
             k = key[1]
             v = " ".join(value)
             job_params[k] = v
+        if node is not None:
+            job_params["node"] = node
         # print(f"appending job_params: {job_params}")
         # self.jobs.append(job_params)
 
@@ -1161,43 +1205,107 @@ class Item:
         subject = self.item["subject"]
         job_hsh = {}
 
-        job_hsh = {i + 1: x for i, x in enumerate(jobs)}
+        job_hsh = {i: x for i, x in enumerate(jobs)}
 
-        finished = [i for i, x in enumerate(jobs) if "f" in x]
+        # finished = [i for i, x in enumerate(jobs) if "f" in x]
+        finished = set()
         waiting = []
         available = []
         prereqs = {}
+        branch = []
+        branches = []
+        current_node = 0
+        job_names = {}
+        last_job_number = 0
+        last_job = {}
         for i, job in job_hsh.items():
+            last_job_number = i
+            last_job = job
+            job_names[i] = job["j"]
             if "f" in job:
-                continue
-            if "p" in job:
-                for j in job["p"]:
-                    print(f"{i = }, {job = }, {j = }")
-                    rij = str(int(i) - int(j))
-                    if rij not in finished:
-                        prereqs.setdefault(i, []).append(rij)
-                if prereqs[i]:
-                    waiting.append(i)
+                finished.add(i)
+            if "node" in job:
+                if job["node"] > 0 and len(branch) > job["node"]:
+                    branches.append(branch)
+                    branch = branch[: job["node"]]
+                branch.append(i)
+
+        if "node" in last_job:
+            branch = branch[: last_job["node"]]
+            # prereqs[i] = branch
+            branch.append(last_job_number)
+            branches.append(branch)
+            branch = []
+
+        all = set()
+        if branches:
+            # available_names = set()
+            # waiting_names = set()
+            prereqs = {}
+            for branch in branches:
+                print(f"branch = {branch}")
+                for _ in branch:
+                    all.add(_)
+                # leaf = branch[-1]
+                for position, i in enumerate(branch):
+                    branch_tail = branch[position + 1 :]
+                    if branch_tail:
+                        prereqs.setdefault(i, set())
+                        for j in branch_tail:
+                            prereqs[i].add(j)
+        print(f"\n\n{all = }\n\n{prereqs = }\n\n{waiting = }")
+
+        for j, req in prereqs.items():
+            prereqs[j] = req - finished
+
+        print("\n\n{prereqs = }\n\n{available = }\n\n{waiting = }")
+
+        available = set()
+        waiting = set()
+        for j in all:
+            if j in prereqs:
+                if prereqs[j]:
+                    waiting.add(j)
                 else:
-                    available.append(i)
-            else:
-                available.append(i)
+                    available.add(j)
+            elif j not in finished:
+                available.add(j)
 
         status = f"{len(available)}/{len(waiting)}/{len(finished)}"
-
         jobs = []
+
         for i, job in job_hsh.items():
-            if i in available:
-                job["itemtype"] = "-"
+            if i in finished:
+                job["itemtype"] = "x"
             elif i in waiting:
                 job["itemtype"] = "+"
+            elif i in available:
+                job["itemtype"] = "-"
             else:
-                job["itemtype"] = "x"
-            job["subject"] = f"{job['j']}: {subject} {status}"
+                job["itemtype"] = "?"
+            loc = job.get("l", "")
+            loc = f" ({loc}) " if loc else " "
+            job["subject"] = f"{job['j']}{loc}{status}"
             job["i"] = i
             jobs.append(job)
 
+        # jobs_names = []
+        #
+        # for i, job in job_hsh.items():
+        #     if i in available:
+        #         job_names["itemtype"] = "-"
+        #     elif i in waiting:
+        #         job["itemtype"] = "+"
+        #     elif i in finished:
+        #         job["itemtype"] = "x"
+        #     else:
+        #         job["itemtype"] = "?"
+        #     job["subject"] = f"{job['j']}: {subject} {status}"
+        #     job["i"] = i
+        #     jobs.append(job)
+
         self.item["j"] = jobs
+        print(f"\n\n{prereqs = }\n\n{available = }\n\n{waiting = }")
         return True, jobs
 
 
