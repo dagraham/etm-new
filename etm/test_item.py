@@ -174,7 +174,77 @@ def test_rrule_to_entry():
 
 def test_task_with_jobs():
     item = Item()
-    input_str = "- task with jobs @s 2024-08-07 4:00pm @j alpha &s 5d &d whatever @j beta &d more of the same &p 1 @j gamma plus &p 1 &d last one"
+    input_str = """- task with jobs @s 2024-08-07 4:00pm @t job
+    @j 0: paint &l shop
+        @j 1: sand &l shop  
+            @j 2: assemble &l shop
+                @j 3: cut pieces &l shop
+                    @j 4: get wood &l Lowes
+                @j 3: get hardware &l Lowes &f 2025-03-26 4:00pm
+        @j 1: get paint &l Lowes
+        """
+
+    item.parse_input(input_str)
+    if item.job_tokens:
+        print(f"job_tokens:\n{item.job_tokens = }")
+    print(f"jobs for {item.item['subject']}:")
+    for job in item.jobs:
+        print(f"  {job}")
+
+    pprint(item.item)
+
+
+def test_task_without_completions():
+    item = Item()
+    input_str = """- dog house @s 2024-08-07 4:00pm @t job
+    @j paint &l shop
+    @j   sand &l shop &d just testing 
+    @j     assemble &l shop
+    @j       cut pieces &l shop
+    @j          get wood &l Lowes 
+    @j       get hardware &l Lowes 
+    @j   get paint &l Lowes 
+    """
+
+    item.parse_input(input_str)
+    if item.job_tokens:
+        print(f"job_tokens:\n{item.job_tokens = }")
+    print(f"jobs for {item.item['subject']}:")
+    for job in item.jobs:
+        print(f"  {job}")
+
+    pprint(item.item)
+
+
+def test_task_with_completions():
+    item = Item()
+    input_str = """- task with jobs @s 2024-08-07 4:00pm @t job
+    @j paint &l shop
+    @j   sand &l shop &d just testing 
+    @j     assemble &l shop
+    @j       cut pieces &l shop
+    @j          get wood &l Lowes &f 2025-03-26 4:00pm
+    @j       get hardware &l Lowes &f 2025-03-26 4:00pm
+    @j   get paint &l Lowes &f 2025-03-26 4:00pm
+    """
+
+    item.parse_input(input_str)
+    if item.job_tokens:
+        print(f"job_tokens:\n{item.job_tokens = }")
+    print(f"jobs for {item.item['subject']}:")
+    for job in item.jobs:
+        print(f"  {job}")
+
+    pprint(item.item)
+
+
+def test_jobs_without_prerequisites():
+    item = Item()
+    input_str = """- task with jobs @s 2024-08-07 4:00pm @t job
+    @j alpha
+    @j beta 
+    @j gamma 
+    """
 
     item.parse_input(input_str)
     if item.job_tokens:
@@ -187,9 +257,12 @@ def test_task_with_jobs():
 
 
 # test_repeat_from_rruleset()
-test_timedelta_string_to_seconds()
-test_do_alert()
-test_item_entry()
+# test_timedelta_string_to_seconds()
+# test_do_alert()
+# test_item_entry()
 # test_rruleset_from_item()
 # test_rrule_to_entry()
 # test_task_with_jobs()
+test_task_without_completions()
+test_task_with_completions()
+# test_jobs_without_prerequisites()
